@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,10 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AnimatedPage } from '@/components/ui/animated-page';
-import { mockEmployees, mockSalarySlips } from '@/data/mock-data';
 import { Employee, SalarySlip } from '@/lib/types';
-import { Plus, Eye, Receipt, X } from 'lucide-react';
+import { Plus, Eye, Receipt, X, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface EmployeeWithDetails extends Employee {
   pfPercentage: number;
@@ -29,8 +31,10 @@ interface SalaryPageProps {
 }
 
 export default function SalaryPage({ params }: SalaryPageProps) {
-  const [employees] = useState<Employee[]>(mockEmployees.filter(e => e.companyId === params.companyId));
-  const [salarySlips, setSalarySlips] = useState<SalarySlip[]>(mockSalarySlips.filter(s => s.companyId === params.companyId));
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [salarySlips, setSalarySlips] = useState<SalarySlip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingSlips, setIsCreatingSlips] = useState(false);
   
   // Employee selection state
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
@@ -55,6 +59,45 @@ export default function SalaryPage({ params }: SalaryPageProps) {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
+
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchEmployees();
+    fetchSalarySlips();
+  }, [params.companyId]);
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await apiClient.getEmployees({
+        companyId: params.companyId,
+        status: 'active',
+        limit: 100
+      });
+      if (response.success && response.data?.employees) {
+        setEmployees(response.data.employees);
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch employees:', error);
+      toast.error('Failed to load employees');
+    }
+  };
+
+  const fetchSalarySlips = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.getCompanySalarySlips(params.companyId, {
+        limit: 50
+      });
+      if (response.success && response.data?.salarySlips) {
+        setSalarySlips(response.data.salarySlips);
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch salary slips:', error);
+      toast.error('Failed to load salary slips');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Handle employee selection in dropdown
   const handleEmployeeToggle = (employeeId: string) => {
@@ -131,37 +174,52 @@ export default function SalaryPage({ params }: SalaryPageProps) {
   };
 
   // Generate salary slips for selected table employees
-  const generateSalarySlips = () => {
+  const generateSalarySlips = async () => {
     const selectedTableEmployees = tableEmployees.filter(emp => emp.isSelected);
-    if (selectedTableEmployees.length === 0 || !month) return;
+    if (selectedTableEmployees.length === 0 || !month) {
+      toast.error('Please select employees and month');
+      return;
+    }
 
-    const newSlips = selectedTableEmployees.map((employee, index) => {
-      const dailySalary = employee.salary / 30;
-      const earnedSalary = dailySalary * employee.daysPresent;
-      const pfDeduction = (employee.salary * employee.pfPercentage) / 100;
-      const esicDeduction = (employee.salary * employee.esicPercentage) / 100;
-      const totalSalary = earnedSalary + employee.bonus - pfDeduction - esicDeduction;
-
-      return {
-        id: (Date.now() + index).toString(),
+    setIsCreatingSlips(true);
+    try {
+      const employeesData = selectedTableEmployees.map(employee => ({
         employeeId: employee.id,
-        employeeName: employee.name,
+        basicSalary: employee.salary,
+        daysPresent: employee.daysPresent,
+        totalWorkingDays: employee.daysPresent + employee.daysAbsent,
+        bonus: employee.bonus,
+        pfPercentage: employee.pfPercentage,
+        esicPercentage: employee.esicPercentage
+      }));
+
+      const response = await apiClient.createBulkSalarySlips({
         companyId: params.companyId,
         month,
         year,
-        daysPresent: employee.daysPresent,
-        daysAbsent: employee.daysAbsent,
-        bonus: employee.bonus,
-        basicSalary: employee.salary,
-        totalSalary,
-        createdAt: new Date()
-      };
-    });
+        employees: employeesData
+      });
 
-    setSalarySlips([...newSlips, ...salarySlips]);
-    
-    // Remove generated employees from table
-    setTableEmployees(prev => prev.filter(emp => !emp.isSelected));
+      if (response.success) {
+        toast.success(`Created ${response.data.created} salary slips successfully`);
+        if (response.data.errors && response.data.errors.length > 0) {
+          response.data.errors.forEach(error => toast.error(error));
+        }
+        
+        // Refresh salary slips
+        await fetchSalarySlips();
+        
+        // Remove generated employees from table
+        setTableEmployees(prev => prev.filter(emp => !emp.isSelected));
+      } else {
+        throw new Error(response.error || 'Failed to create salary slips');
+      }
+    } catch (error: any) {
+      console.error('Error creating salary slips:', error);
+      toast.error(error.message || 'Failed to create salary slips');
+    } finally {
+      setIsCreatingSlips(false);
+    }
   };
 
   const handlePreview = (slip: SalarySlip) => {
@@ -173,6 +231,67 @@ export default function SalaryPage({ params }: SalaryPageProps) {
   const availableEmployees = employees.filter(emp => 
     !tableEmployees.some(tableEmp => tableEmp.id === emp.id)
   );
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <AnimatedPage>
+        <div className="space-y-6">
+          <div>
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-8 w-32" />
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-48" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 py-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-8 w-16" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </AnimatedPage>
+    );
+  }
 
   return (
     <AnimatedPage>
@@ -445,10 +564,14 @@ export default function SalaryPage({ params }: SalaryPageProps) {
               </div>
               <Button 
                 onClick={generateSalarySlips}
-                disabled={selectedCount === 0}
+                disabled={selectedCount === 0 || isCreatingSlips}
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Generate for Selected ({selectedCount})
+                {isCreatingSlips ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                {isCreatingSlips ? 'Creating...' : `Generate for Selected (${selectedCount})`}
               </Button>
             </div>
           </CardHeader>

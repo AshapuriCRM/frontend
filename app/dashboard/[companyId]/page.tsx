@@ -14,5 +14,5 @@ export async function generateStaticParams() {
 }
 
 export default function DashboardPage({ params }: DashboardPageProps) {
-  return <RedirectToTab companyId={params.companyId} tab="invoice" />;
+  return <RedirectToTab companyId={params.companyId} tab="overview" />;
 }

@@ -1,21 +1,27 @@
 export interface Company {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   logo: string;
   location: string;
   employeeCount: number;
   createdAt: Date;
+  email?: string;
+  phone?: string;
+  gstNumber?: string;
+  panNumber?: string;
 }
 
 export interface Employee {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   email: string;
   phone: string;
   category: string;
   dateJoined: Date;
   salary: number;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'terminated' | 'on-leave';
   companyId: string;
 }
 

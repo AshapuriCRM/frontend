@@ -11,17 +11,33 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Shield, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
-export default function LoginPage() {
+export default function RegisterPage() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading, error, clearError } = useAuth();
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [validationError, setValidationError] = useState('');
+  const { register, isLoading, error, clearError } = useAuth();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    setValidationError('');
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setValidationError('Passwords do not match');
+      return;
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      setValidationError('Password must be at least 6 characters long');
+      return;
+    }
     
     try {
-      await login(email, password);
+      await register(name, email, password);
     } catch (error) {
       // Error is handled by the context
     }
@@ -37,19 +53,30 @@ export default function LoginPage() {
                 <Shield className="h-8 w-8 text-primary" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+            <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
             <CardDescription>
-              Sign in to your Ashapuri CRM account
+              Sign up for your Ashapuri CRM account
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {error && (
+            {(error || validationError) && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{error || validationError}</AlertDescription>
               </Alert>
             )}
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -70,16 +97,29 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  minLength={6}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Signing in...' : 'Sign In'}
+                {isLoading ? 'Creating Account...' : 'Create Account'}
               </Button>
             </form>
             <div className="mt-4 text-center text-sm">
-              Don't have an account?{' '}
-              <Link href="/register" className="text-primary hover:underline">
-                Register here
+              Already have an account?{' '}
+              <Link href="/login" className="text-primary hover:underline">
+                Sign in here
               </Link>
             </div>
           </CardContent>

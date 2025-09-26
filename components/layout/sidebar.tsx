@@ -13,7 +13,8 @@ import {
   Settings,
   Users,
   Menu,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
@@ -23,6 +24,11 @@ interface SidebarProps {
 }
 
 const navigation = [
+  {
+    name: 'Dashboard',
+    href: '/overview',
+    icon: BarChart3,
+  },
   {
     name: 'Invoice',
     href: '/invoice',
