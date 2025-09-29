@@ -14,7 +14,8 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Company } from '@/lib/types';
-import { Plus, Search, Users, MapPin, LogOut, AlertCircle, Building2 } from 'lucide-react';
+import { Plus, Search, Users, MapPin, LogOut, AlertCircle, Building2, LayoutDashboard, Folder, Menu } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { ProtectedRoute } from '@/components/auth/protected-route';
@@ -104,6 +105,14 @@ export default function CompaniesPage() {
     router.push(`/dashboard/${companyId}`);
   };
 
+  const handleAdminDashboardClick = () => {
+    console.log('Admin Dashboard Button clicked!');
+  };
+
+  const handleFilesAssetsClick = () => {
+    router.push('/admin/files-and-assets');
+  };
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background">
@@ -113,10 +122,56 @@ export default function CompaniesPage() {
             <Building2 className="h-6 w-6" />
             <h1 className="text-2xl font-bold">Ashapuri CRM</h1>
           </div>
-          <Button variant="outline" className='gradient-button' onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2">
+              <Button variant="default" className='gradient-button' onClick={handleAdminDashboardClick}>
+                <LayoutDashboard className="h-4 w-4 mr-2" />
+                Admin Dashboard
+              </Button>
+              <Button variant="outline" className='gradient-button' onClick={handleFilesAssetsClick}>
+                <Folder className="h-4 w-4 mr-2" />
+                Files & Assets
+              </Button>
+              <Button variant="outline" className='text-destructive border-destructive hover:text-destructive hover:border-destructive' onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+            <div className="sm:hidden">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" className='gradient-button'>
+                    <Menu className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-72 sm:w-80">
+                  <SheetHeader>
+                    <SheetTitle>Menu</SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-6 grid gap-3">
+                    <SheetClose asChild>
+                      <Button variant="default" className='w-full' onClick={handleAdminDashboardClick}>
+                        <LayoutDashboard className="h-4 w-4 mr-2" />
+                        Admin Dashboard
+                      </Button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Button variant="outline" className='w-full' onClick={handleFilesAssetsClick}>
+                        <Folder className="h-4 w-4 mr-2" />
+                        Files & Assets
+                      </Button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Button variant="outline" className='w-full text-destructive border-destructive hover:text-destructive hover:border-destructive' onClick={handleLogout}>
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Logout
+                      </Button>
+                    </SheetClose>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
+          </div>
         </div>
       </div>
 

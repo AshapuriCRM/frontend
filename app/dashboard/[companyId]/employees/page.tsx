@@ -11,11 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AnimatedPage } from '@/components/ui/animated-page';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { Employee, Company } from '@/lib/types';
+import Link from 'next/link';
 import { Plus, Pencil, Trash2, Search, Users, Filter, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,6 +34,8 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewEmployee, setPreviewEmployee] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -53,9 +58,38 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
     name: '',
     email: '',
     phone: '',
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      pinCode: '',
+      country: 'India'
+    },
     category: '',
+    categoryId: '',
+    dateJoined: new Date().toISOString().substring(0,10),
     salary: 0,
-    status: 'active' as 'active' | 'inactive' | 'terminated' | 'on-leave'
+    status: 'active' as 'active' | 'inactive' | 'terminated' | 'on-leave',
+    documents: {
+      aadhar: '',
+      pan: '',
+      bankAccount: {
+        accountNumber: '',
+        ifscCode: '',
+        bankName: ''
+      },
+      photo: ''
+    },
+    emergencyContact: {
+      name: '',
+      relationship: '',
+      phone: ''
+    },
+    workSchedule: {
+      shiftType: 'day' as 'day' | 'night' | 'rotating',
+      workingDays: 26,
+      workingHours: 8
+    }
   });
 
   useEffect(() => {
@@ -110,15 +144,29 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
       name: '',
       email: '',
       phone: '',
+      address: { street: '', city: '', state: '', pinCode: '', country: 'India' },
       category: '',
+      categoryId: '',
+      dateJoined: new Date().toISOString().substring(0,10),
       salary: 0,
-      status: 'active'
+      status: 'active',
+      documents: {
+        aadhar: '',
+        pan: '',
+        bankAccount: { accountNumber: '', ifscCode: '', bankName: '' },
+        photo: ''
+      },
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      workSchedule: { shiftType: 'day', workingDays: 26, workingHours: 8 }
     });
     setEditingEmployee(null);
   };
 
   const handleSubmit = async () => {
-    if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.category.trim()) {
+    if (!formData.name.trim() || !formData.phone.trim() || !formData.category.trim() || !formData.salary ||
+      !formData.documents.bankAccount.accountNumber?.trim() ||
+      !formData.documents.bankAccount.ifscCode?.trim() ||
+      !formData.documents.bankAccount.bankName?.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -129,7 +177,7 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
         const response = await apiClient.updateEmployee((editingEmployee as any).id || (editingEmployee as any)._id, {
           ...formData,
           companyId: params.companyId
-        });
+        } as any);
         
         if (response.success && response.data) {
           setEmployees(prev => prev.map(emp => 
@@ -141,8 +189,9 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
         setIsCreating(true);
         const response = await apiClient.createEmployee({
           ...formData,
+          dateJoined: formData.dateJoined,
           companyId: params.companyId
-        });
+        } as any);
         
         if (response.success && response.data) {
           setEmployees(prev => [...prev, response.data!]);
@@ -165,13 +214,47 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
     setEditingEmployee(employee);
     setFormData({
       name: employee.name,
-      email: employee.email,
+      email: employee.email || '',
       phone: employee.phone,
+      address: {
+        street: employee.address?.street || '',
+        city: employee.address?.city || '',
+        state: employee.address?.state || '',
+        pinCode: employee.address?.pinCode || '',
+        country: employee.address?.country || 'India'
+      },
       category: employee.category,
+      categoryId: (employee as any).categoryId || '',
+      dateJoined: employee.dateJoined ? new Date(employee.dateJoined as any).toISOString().substring(0,10) : new Date().toISOString().substring(0,10),
       salary: employee.salary,
-      status: employee.status
+      status: employee.status,
+      documents: {
+        aadhar: employee.documents?.aadhar || '',
+        pan: employee.documents?.pan || '',
+        bankAccount: {
+          accountNumber: employee.documents?.bankAccount?.accountNumber || '',
+          ifscCode: employee.documents?.bankAccount?.ifscCode || '',
+          bankName: employee.documents?.bankAccount?.bankName || ''
+        },
+        photo: employee.documents?.photo || ''
+      },
+      emergencyContact: {
+        name: employee.emergencyContact?.name || '',
+        relationship: employee.emergencyContact?.relationship || '',
+        phone: employee.emergencyContact?.phone || ''
+      },
+      workSchedule: {
+        shiftType: (employee.workSchedule?.shiftType as any) || 'day',
+        workingDays: employee.workSchedule?.workingDays || 26,
+        workingHours: employee.workSchedule?.workingHours || 8
+      }
     });
     setIsDialogOpen(true);
+  };
+
+  const openPreview = (employee: Employee) => {
+    setPreviewEmployee(employee);
+    setIsPreviewOpen(true);
   };
 
   const handleDelete = async (employee: Employee) => {
@@ -194,7 +277,7 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
   // Filter employees
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (employee.email ? employee.email.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
                          employee.phone.includes(searchTerm);
     const matchesStatus = statusFilter === 'all' || employee.status === statusFilter;
     const matchesCategory = categoryFilter === 'all' || employee.category === categoryFilter;
@@ -208,7 +291,10 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
   const paginatedEmployees = filteredEmployees.slice(startIndex, startIndex + itemsPerPage);
 
   // Get unique categories from employees
-  const categories = [...new Set(employees.map(emp => emp.category))].filter(Boolean);
+  const categories = employees
+    .map(emp => emp.category)
+    .filter((c): c is string => Boolean(c))
+    .filter((value, index, self) => self.indexOf(value) === index);
 
   if (isLoading) {
     return (
@@ -293,14 +379,14 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                   Add Employee
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                   <DialogTitle>
                     {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
                   </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name</Label>
                       <Input
@@ -325,7 +411,8 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="phone">Phone</Label>
                       <Input
@@ -333,6 +420,88 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         placeholder="+91 9876543210"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="dateJoined">Date Joined</Label>
+                      <Input
+                        id="dateJoined"
+                        type="date"
+                        value={formData.dateJoined}
+                        onChange={(e) => setFormData({ ...formData, dateJoined: e.target.value })}
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="street">Street</Label>
+                      <Input
+                        id="street"
+                        value={formData.address.street}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
+                        placeholder="123 Main St"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        value={formData.address.city}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
+                        placeholder="Ahmedabad"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State</Label>
+                      <Input
+                        id="state"
+                        value={formData.address.state}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
+                        placeholder="Gujarat"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pinCode">PIN Code</Label>
+                      <Input
+                        id="pinCode"
+                        value={formData.address.pinCode}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, pinCode: e.target.value } })}
+                        placeholder="380001"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="country">Country</Label>
+                      <Input
+                        id="country"
+                        value={formData.address.country}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, country: e.target.value } })}
+                        placeholder="India"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="categoryId">Category ID</Label>
+                      <Input
+                        id="categoryId"
+                        value={formData.categoryId}
+                        onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                        placeholder="Optional category ID"
                         disabled={isCreating || isUpdating}
                       />
                     </div>
@@ -358,7 +527,8 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="salary">Salary (₹)</Label>
                       <Input
@@ -386,11 +556,148 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                       </Select>
                     </div>
                   </div>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="aadhar">Aadhar</Label>
+                      <Input
+                        id="aadhar"
+                        value={formData.documents.aadhar}
+                        onChange={(e) => setFormData({ ...formData, documents: { ...formData.documents, aadhar: e.target.value } })}
+                        placeholder="XXXX-XXXX-XXXX"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pan">PAN</Label>
+                      <Input
+                        id="pan"
+                        value={formData.documents.pan}
+                        onChange={(e) => setFormData({ ...formData, documents: { ...formData.documents, pan: e.target.value.toUpperCase() } })}
+                        placeholder="ABCDE1234F"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="photo">Photo URL</Label>
+                      <Input
+                        id="photo"
+                        value={formData.documents.photo}
+                        onChange={(e) => setFormData({ ...formData, documents: { ...formData.documents, photo: e.target.value } })}
+                        placeholder="https://..."
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="accountNumber">Bank Account Number</Label>
+                      <Input
+                        id="accountNumber"
+                        value={formData.documents.bankAccount.accountNumber}
+                        onChange={(e) => setFormData({ ...formData, documents: { ...formData.documents, bankAccount: { ...formData.documents.bankAccount, accountNumber: e.target.value } } })}
+                        placeholder="1234567890"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ifscCode">IFSC Code</Label>
+                      <Input
+                        id="ifscCode"
+                        value={formData.documents.bankAccount.ifscCode}
+                        onChange={(e) => setFormData({ ...formData, documents: { ...formData.documents, bankAccount: { ...formData.documents.bankAccount, ifscCode: e.target.value.toUpperCase() } } })}
+                        placeholder="HDFC0001234"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bankName">Bank Name</Label>
+                      <Input
+                        id="bankName"
+                        value={formData.documents.bankAccount.bankName}
+                        onChange={(e) => setFormData({ ...formData, documents: { ...formData.documents, bankAccount: { ...formData.documents.bankAccount, bankName: e.target.value } } })}
+                        placeholder="HDFC Bank"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="emgName">Emergency Contact Name</Label>
+                      <Input
+                        id="emgName"
+                        value={formData.emergencyContact.name}
+                        onChange={(e) => setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, name: e.target.value } })}
+                        placeholder="Jane Doe"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="relationship">Relationship</Label>
+                      <Input
+                        id="relationship"
+                        value={formData.emergencyContact.relationship}
+                        onChange={(e) => setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, relationship: e.target.value } })}
+                        placeholder="Spouse"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="emgPhone">Emergency Phone</Label>
+                      <Input
+                        id="emgPhone"
+                        value={formData.emergencyContact.phone}
+                        onChange={(e) => setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, phone: e.target.value } })}
+                        placeholder="+91 98765 43210"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="shiftType">Shift Type</Label>
+                      <Select value={formData.workSchedule.shiftType} onValueChange={(value: 'day' | 'night' | 'rotating') => setFormData({ ...formData, workSchedule: { ...formData.workSchedule, shiftType: value } })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="day">Day</SelectItem>
+                          <SelectItem value="night">Night</SelectItem>
+                          <SelectItem value="rotating">Rotating</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="workingDays">Working Days</Label>
+                      <Input
+                        id="workingDays"
+                        type="number"
+                        value={formData.workSchedule.workingDays}
+                        onChange={(e) => setFormData({ ...formData, workSchedule: { ...formData.workSchedule, workingDays: Number(e.target.value) } })}
+                        placeholder="26"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="workingHours">Working Hours</Label>
+                      <Input
+                        id="workingHours"
+                        type="number"
+                        value={formData.workSchedule.workingHours}
+                        onChange={(e) => setFormData({ ...formData, workSchedule: { ...formData.workSchedule, workingHours: Number(e.target.value) } })}
+                        placeholder="8"
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
                   
                   <Button 
                     onClick={handleSubmit} 
                     className="w-full" 
-                    disabled={!formData.name || !formData.email || !formData.category || isCreating || isUpdating}
+                    disabled={!formData.name || !formData.phone || !formData.category || !formData.salary || !formData.documents.bankAccount.accountNumber || !formData.documents.bankAccount.ifscCode || !formData.documents.bankAccount.bankName || isCreating || isUpdating}
                   >
                     {isCreating || isUpdating ? (
                       <>
@@ -518,9 +825,13 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                 </TableHeader>
                 <TableBody>
                   {paginatedEmployees.map((employee, index) => (
-                    <TableRow key={(employee as any).id || (employee as any)._id || `employee-${index}`}>
-                      <TableCell className="font-medium">{employee.name}</TableCell>
-                      <TableCell>{employee.email}</TableCell>
+                    <TableRow key={(employee as any).id || (employee as any)._id || `employee-${index}`} className="cursor-pointer hover:bg-muted/50" onClick={() => openPreview(employee)}>
+                      <TableCell className="font-medium">
+                        <Link className="underline-offset-2 hover:underline" href={`/dashboard/${params.companyId}/employees/${(employee as any).id || (employee as any)._id}`} onClick={(e) => e.stopPropagation()}>
+                          {employee.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{employee.email || '-'}</TableCell>
                       <TableCell>{employee.phone}</TableCell>
                       <TableCell>{employee.category}</TableCell>
                       <TableCell>₹{employee.salary.toLocaleString()}</TableCell>
@@ -538,13 +849,13 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex space-x-2">
-                          <Button size="sm" variant="ghost" onClick={() => handleEdit(employee)}>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleEdit(employee); }}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button 
                             size="sm" 
                             variant="ghost" 
-                            onClick={() => handleDelete(employee)}
+                            onClick={(e) => { e.stopPropagation(); handleDelete(employee); }}
                             className="text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -605,6 +916,94 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
             </Card>
           )}
         </div>
+
+        {/* Preview Drawer */}
+        <Sheet open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>{previewEmployee?.name || 'Employee'}</SheetTitle>
+              <SheetDescription>Employee details preview</SheetDescription>
+            </SheetHeader>
+            {previewEmployee && (
+              <div className="space-y-6 mt-4">
+                <div className="flex items-center justify-between">
+                  <Badge variant={previewEmployee.status === 'active' ? 'default' : previewEmployee.status === 'on-leave' ? 'secondary' : previewEmployee.status === 'terminated' ? 'destructive' : 'outline'}>
+                    {previewEmployee.status.replace('-', ' ')}
+                  </Badge>
+                  <div className="text-sm text-muted-foreground">Joined {previewEmployee.dateJoined ? new Date(previewEmployee.dateJoined as any).toLocaleDateString() : '-'}</div>
+                </div>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Personal</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div><span className="text-muted-foreground text-sm">Email: </span>{previewEmployee.email || '-'}</div>
+                    <div><span className="text-muted-foreground text-sm">Phone: </span>{previewEmployee.phone}</div>
+                    <div><span className="text-muted-foreground text-sm">Category: </span>{previewEmployee.category}</div>
+                    <div><span className="text-muted-foreground text-sm">Salary: </span>₹{previewEmployee.salary.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Address</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div><span className="text-muted-foreground text-sm">Street: </span>{previewEmployee.address?.street || '-'}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><span className="text-muted-foreground text-sm">City: </span>{previewEmployee.address?.city || '-'}</div>
+                      <div><span className="text-muted-foreground text-sm">State: </span>{previewEmployee.address?.state || '-'}</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><span className="text-muted-foreground text-sm">PIN: </span>{previewEmployee.address?.pinCode || '-'}</div>
+                      <div><span className="text-muted-foreground text-sm">Country: </span>{previewEmployee.address?.country || '-'}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Documents</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div><span className="text-muted-foreground text-sm">Aadhar: </span>{previewEmployee.documents?.aadhar || '-'}</div>
+                    <div><span className="text-muted-foreground text-sm">PAN: </span>{previewEmployee.documents?.pan || '-'}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><span className="text-muted-foreground text-sm">Account #: </span>{previewEmployee.documents?.bankAccount?.accountNumber || '-'}</div>
+                      <div><span className="text-muted-foreground text-sm">IFSC: </span>{previewEmployee.documents?.bankAccount?.ifscCode || '-'}</div>
+                    </div>
+                    <div><span className="text-muted-foreground text-sm">Bank: </span>{previewEmployee.documents?.bankAccount?.bankName || '-'}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Emergency Contact</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div><span className="text-muted-foreground text-sm">Name: </span>{previewEmployee.emergencyContact?.name || '-'}</div>
+                    <div><span className="text-muted-foreground text-sm">Relationship: </span>{previewEmployee.emergencyContact?.relationship || '-'}</div>
+                    <div><span className="text-muted-foreground text-sm">Phone: </span>{previewEmployee.emergencyContact?.phone || '-'}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Work Schedule</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div><span className="text-muted-foreground text-sm">Shift: </span>{previewEmployee.workSchedule?.shiftType || '-'}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><span className="text-muted-foreground text-sm">Working Days: </span>{previewEmployee.workSchedule?.workingDays ?? '-'}</div>
+                      <div><span className="text-muted-foreground text-sm">Working Hours: </span>{previewEmployee.workSchedule?.workingHours ?? '-'}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </SheetContent>
+        </Sheet>
       </AnimatedPage>
     </ProtectedRoute>
   );

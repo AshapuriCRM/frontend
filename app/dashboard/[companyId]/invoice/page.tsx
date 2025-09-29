@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, Upload, Loader2, CheckCircle, AlertCircle, Users, Download, Eye, Calendar, DollarSign, Trash2 } from 'lucide-react';
+import { FileText, Upload, Loader2, CheckCircle, AlertCircle, Users, Download, Eye, Calendar, DollarSign, Trash2, AlertTriangle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PDFDownloadLink, Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
 
 interface InvoicePageProps {
@@ -70,6 +71,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
   const [selectedInvoice, setSelectedInvoice] = useState<RecentInvoice | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isDeletingInvoice, setIsDeletingInvoice] = useState<string | null>(null);
+  const [existingEmployeeNames, setExistingEmployeeNames] = useState<Set<string>>(new Set());
+  const [isCheckingEmployees, setIsCheckingEmployees] = useState(false);
 
   // Fetch company data when component mounts
   useEffect(() => {
@@ -239,6 +242,38 @@ export default function InvoicePage({ params }: InvoicePageProps) {
       setIsProcessing(false);
     }
   };
+
+  // Normalize name for comparison
+  const normalizeName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // After results load, fetch company employees once and build a fast lookup set
+  useEffect(() => {
+    const fetchEmployeesForCheck = async () => {
+      if (!result?.extracted_data?.length) {
+        setExistingEmployeeNames(new Set());
+        return;
+      }
+      try {
+        setIsCheckingEmployees(true);
+        const response = await apiClient.getEmployeesByCompany(params.companyId, 'active', 5000);
+        if (response.success && response.data?.employees) {
+          const nameSet = new Set<string>();
+          response.data.employees.forEach((emp: any) => {
+            if (emp?.name) {
+              nameSet.add(normalizeName(emp.name));
+            }
+          });
+          setExistingEmployeeNames(nameSet);
+        }
+      } catch (err) {
+        console.error('Failed to fetch employees for existence check:', err);
+      } finally {
+        setIsCheckingEmployees(false);
+      }
+    };
+
+    fetchEmployeesForCheck();
+  }, [params.companyId, result?.extracted_data]);
 
   // Convert grand total to words
   const numberToWords = (num: number) => {
@@ -997,10 +1032,25 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                               const attendanceRate = totalDays > 0 ? 
                                 ((record.present_day / totalDays) * 100).toFixed(1) : 'N/A';
                               
+                              const nameExists = existingEmployeeNames.has(normalizeName(record.name || ''));
                               return (
                                 <tr key={index} className="border-b hover:bg-muted/30 transition-colors">
                                   <td className="px-3 py-3">
-                                    <div>
+                                    <div className="flex items-start gap-2">
+                                      {!nameExists && (
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <span className="inline-flex items-center justify-center mt-0.5">
+                                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                              </span>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-sm">Employee "{record.name}" not found in database</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      )}
                                       <p className="font-medium text-sm">{record.name}</p>
                                       <div className="flex gap-1 mt-1">
                                         {record.total_day && (
@@ -1070,8 +1120,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                           return (
                             <>
                               {/* Basic Calculations */}
-                              <div className="bg-blue-50 p-4 rounded-lg border">
-                                <h4 className="font-medium text-blue-900 mb-3">Basic Calculation</h4>
+                              <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border dark:border-blue-800 backdrop-blur-sm">
+                                <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">Basic Calculation</h4>
                                 <div className="space-y-2 text-sm">
                                   <div className="flex justify-between">
                                     <span>Base Amount ({totalPresentDays} days × ₹{perDay})</span>
@@ -1093,8 +1143,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                               </div>
 
                               {/* Service & Tax */}
-                              <div className="bg-purple-50 p-4 rounded-lg border">
-                                <h4 className="font-medium text-purple-900 mb-3">Service & Tax</h4>
+                              <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-lg border dark:border-purple-800 backdrop-blur-sm">
+                                <h4 className="font-medium text-purple-900 dark:text-purple-100 mb-3">Service & Tax</h4>
                                 <div className="space-y-2 text-sm">
                                   <div className="flex justify-between">
                                     <span>Service Charge @ {serviceChargeRate}%</span>
@@ -1108,25 +1158,25 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                               </div>
 
                               {/* GST Section */}
-                              <div className={`p-4 rounded-lg border ${gstPaidBy === 'principal-employer' ? 'bg-orange-50' : 'bg-green-50'}`}>
-                                <h4 className={`font-medium mb-3 ${gstPaidBy === 'principal-employer' ? 'text-orange-900' : 'text-green-900'}`}>
+                              <div className={`p-4 rounded-lg border ${gstPaidBy === 'principal-employer' ? 'bg-orange-50 dark:bg-orange-900/30 dark:border-orange-800' : 'bg-green-50 dark:bg-green-900/30 dark:border-green-800'}`}>
+                                <h4 className={`font-medium mb-3 ${gstPaidBy === 'principal-employer' ? 'text-orange-900 dark:text-orange-100' : 'text-green-900 dark:text-green-100'}`}>
                                   GST ({gstPaidBy === 'principal-employer' ? 'Paid by PE' : 'Paid by Ashapuri'})
                                 </h4>
                                 <div className="space-y-2 text-sm">
                                   <div className="flex justify-between">
                                     <span>CGST @ 9%</span>
-                                    <span className={gstPaidBy === 'principal-employer' ? 'text-orange-600' : ''}>
+                                    <span className={gstPaidBy === 'principal-employer' ? 'text-orange-600 dark:text-orange-300' : 'dark:text-green-200'}>
                                       {gstPaidBy === 'ashapuri' ? `₹${cgst.toLocaleString('en-IN', {maximumFractionDigits: 2})}` : '— (PE pays)'}
                                     </span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span>SGST @ 9%</span>
-                                    <span className={gstPaidBy === 'principal-employer' ? 'text-orange-600' : ''}>
+                                    <span className={gstPaidBy === 'principal-employer' ? 'text-orange-600 dark:text-orange-300' : 'dark:text-green-200'}>
                                       {gstPaidBy === 'ashapuri' ? `₹${sgst.toLocaleString('en-IN', {maximumFractionDigits: 2})}` : '— (PE pays)'}
                                     </span>
                                   </div>
                                   {gstPaidBy === 'principal-employer' && (
-                                    <div className="flex justify-between text-orange-700 text-xs italic pt-1">
+                                    <div className="flex justify-between text-orange-700 dark:text-orange-300 text-xs italic pt-1">
                                       <span>GST Amount (for PE)</span>
                                       <span>₹{(cgst + sgst).toLocaleString('en-IN', {maximumFractionDigits: 2})}</span>
                                     </div>
@@ -1135,10 +1185,10 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                               </div>
 
                               {/* Grand Total */}
-                              <div className="bg-gradient-to-r from-green-100 to-emerald-100 p-4 rounded-lg border-2 border-green-300">
+                              <div className="bg-gradient-to-r from-green-100 to-emerald-100 dark:from-emerald-900/40 dark:to-green-900/40 p-4 rounded-lg border-2 border-green-300 dark:border-emerald-800">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-lg font-bold text-green-800">GRAND TOTAL</span>
-                                  <span className="text-2xl font-bold text-green-700">
+                                  <span className="text-lg font-bold text-green-800 dark:text-emerald-200">GRAND TOTAL</span>
+                                  <span className="text-2xl font-bold text-green-700 dark:text-emerald-100">
                                     ₹{grandTotal.toLocaleString('en-IN')}
                                   </span>
                                 </div>

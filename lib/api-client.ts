@@ -1,4 +1,4 @@
-import { User, Company, Employee, Invoice } from './types';
+import { User, Company, Employee, Invoice, EmployeeCreateInput, EmployeeUpdateInput } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -209,7 +209,7 @@ class ApiClient {
   }
 
   // Employee API methods
-  async createEmployee(employeeData: Omit<Employee, 'id' | 'dateJoined'>): Promise<ApiResponse<Employee>> {
+  async createEmployee(employeeData: EmployeeCreateInput): Promise<ApiResponse<Employee>> {
     return this.request('/employees', {
       method: 'POST',
       body: JSON.stringify(employeeData),
@@ -242,7 +242,7 @@ class ApiClient {
     return this.request(`/employees/${id}`);
   }
 
-  async updateEmployee(id: string, employeeData: Partial<Employee>): Promise<ApiResponse<Employee>> {
+  async updateEmployee(id: string, employeeData: EmployeeUpdateInput): Promise<ApiResponse<Employee>> {
     return this.request(`/employees/${id}`, {
       method: 'PUT',
       body: JSON.stringify(employeeData),
@@ -419,12 +419,14 @@ class ApiClient {
     year: number;
     employees: Array<{
       employeeId: string;
+      employeeName?: string;
       basicSalary?: number;
       daysPresent: number;
       totalWorkingDays: number;
-      bonus?: number;
+      daysAbsent?: number;
       pfPercentage?: number;
       esicPercentage?: number;
+      totalSalary?: number;
       overtimeHours?: number;
       hra?: number;
       transport?: number;
@@ -446,6 +448,9 @@ class ApiClient {
     salarySlips: any[];
     errors: string[] | null;
   }>> {
+    console.log("salaryData");
+
+    console.table(salaryData);
     return this.request('/salary/create-bulk', {
       method: 'POST',
       body: JSON.stringify(salaryData),
@@ -489,7 +494,7 @@ class ApiClient {
     attendance?: any;
     salary?: any;
     deductions?: any;
-    bonus?: number;
+    overtimeHours?: number;
     paymentInfo?: any;
     notes?: string;
   }): Promise<ApiResponse<any>> {
