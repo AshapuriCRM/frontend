@@ -26,6 +26,7 @@ import {
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { ProtectedRoute } from '@/components/auth/protected-route';
+import type { Company } from '@/lib/types';
 
 interface DashboardPageProps {
   params: { companyId: string };
@@ -48,13 +49,13 @@ interface CompanyStats {
   }>;
 }
 
-interface Company {
-  id: string;
-  name: string;
-  location: string;
-  logo: string;
-  employeeCount: number;
-}
+// interface Company {
+//   id: string;
+//   name: string;
+//   location: string;
+//   logo: string;
+//   employeeCount: number;
+// }
 
 export default function DashboardOverviewPage({ params }: DashboardPageProps) {
   const [company, setCompany] = useState<Company | null>(null);
@@ -124,19 +125,26 @@ export default function DashboardOverviewPage({ params }: DashboardPageProps) {
             if (employeesResponse.success && employeesResponse.data?.employees && Array.isArray(employeesResponse.data.employees)) {
               // Sort by date and take most recent 5, with proper validation
               const recentEmployees = employeesResponse.data.employees
-                .filter(emp => emp && emp.name && emp.email) // Filter out invalid entries
+                .filter((emp) => emp && emp.name && emp.email) // Filter out invalid entries
                 .sort((a, b) => {
-                  const dateA = new Date(a.dateJoined || a.createdAt || 0).getTime();
-                  const dateB = new Date(b.dateJoined || b.createdAt || 0).getTime();
+                  const dateA = new Date(
+                    a.dateJoined || a.createdAt || 0
+                  ).getTime();
+                  const dateB = new Date(
+                    b.dateJoined || b.createdAt || 0
+                  ).getTime();
                   return dateB - dateA; // Most recent first
                 })
                 .slice(0, 5)
-                .map(emp => ({
-                  id: String(emp.id || emp._id || ''),
-                  name: String(emp.name || 'Unknown'),
-                  email: String(emp.email || ''),
-                  status: String(emp.status || 'active'),
-                  createdAt: emp.dateJoined || emp.createdAt || new Date().toISOString()
+                .map((emp) => ({
+                  id: String(emp.id || emp._id || ""),
+                  name: String(emp.name || "Unknown"),
+                  email: String(emp.email || ""),
+                  status: String(emp.status || "active"),
+                  // createdAt: emp.dateJoined || emp.createdAt || new Date().toISOString()
+                  createdAt: new Date(
+                    emp.dateJoined || emp.createdAt || Date.now()
+                  ).toISOString(),
                 }));
                 
               setStats(prevStats => prevStats ? {

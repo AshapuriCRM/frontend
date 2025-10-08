@@ -40,7 +40,7 @@ export interface EmployeeEmergencyContact {
 }
 
 export interface EmployeeWorkSchedule {
-  shiftType?: 'day' | 'night' | 'rotating';
+  shiftType?: "day" | "night" | "rotating";
   workingDays?: number;
   workingHours?: number;
 }
@@ -56,7 +56,7 @@ export interface Employee {
   categoryId?: string;
   dateJoined: Date;
   salary: number;
-  status: 'active' | 'inactive' | 'terminated' | 'on-leave';
+  status: "active" | "inactive" | "terminated" | "on-leave";
   companyId: string;
   documents?: EmployeeDocuments;
   emergencyContact?: EmployeeEmergencyContact;
@@ -77,7 +77,7 @@ export interface EmployeeCreateInput {
   dateJoined: string | Date;
   salary: number;
   companyId: string;
-  status?: 'active' | 'inactive' | 'terminated' | 'on-leave';
+  status?: "active" | "inactive" | "terminated" | "on-leave";
   documents?: EmployeeDocuments;
   emergencyContact?: EmployeeEmergencyContact;
   workSchedule?: EmployeeWorkSchedule;
@@ -85,18 +85,27 @@ export interface EmployeeCreateInput {
 
 export interface EmployeeUpdateInput extends Partial<EmployeeCreateInput> {}
 
+export interface EmployeeStatsData {
+  totalEmployees: number;
+  activeEmployees: number;
+  inactiveEmployees: number;
+  terminatedEmployees: number;
+  onLeaveEmployees: number;
+  averageSalary: number;
+  totalSalaryExpense: number;
+}
+
 export interface JobCategory {
   id: string;
   title: string;
   baseWage: number;
-  wageType?: 'monthly' | 'daily';
+  wageType?: "monthly" | "daily";
   companyId: string;
   ratesApplied?: boolean;
   gstRate?: number;
   pfRate?: number;
   esicRate?: number;
 }
-
 
 export interface Invoice {
   id: string;
@@ -108,7 +117,7 @@ export interface Invoice {
   esicAmount: number;
   totalAmount: number;
   createdAt: Date;
-  status: 'draft' | 'sent' | 'paid';
+  status: "draft" | "sent" | "paid";
 }
 
 export interface SalarySlip {
@@ -134,7 +143,7 @@ export interface Document {
   uploadedAt: Date;
   companyId: string;
   url: string;
-  folderId?: string; 
+  folderId?: string;
 }
 
 export interface DocumentFolder {
@@ -145,6 +154,26 @@ export interface DocumentFolder {
   documentCount: number;
 }
 
+export interface CompanyFolderFile {
+  _id: string;
+  name: string;
+  size?: string;
+  file_type: string;
+  file_url: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyFolder {
+  _id: string;
+  folder_name: string;
+  company_id: string;
+  soft_delete?: boolean;
+  files?: CompanyFolderFile[];
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface User {
   id: string;
