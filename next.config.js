@@ -8,7 +8,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:5000/api/:path*', // Backend server
+        destination: 'https://backend-jbif.onrender.com/api/:path*', // Backend server
       },
     ];
   },
