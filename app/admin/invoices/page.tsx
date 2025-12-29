@@ -432,7 +432,13 @@ export default function InvoiceMergePage() {
     try {
       const res = await apiClient.getInvoice(id);
       if (res.success && res.data) {
-        setSelectedInvoice(res.data as InvoiceItem);
+        // Map the response to InvoiceItem format (handle both id and _id)
+        const data = res.data as any;
+        const invoiceItem: InvoiceItem = {
+          ...data,
+          _id: data._id || data.id || id,
+        };
+        setSelectedInvoice(invoiceItem);
         setInvoiceDetailsOpen(true);
       }
     } catch (err) {
