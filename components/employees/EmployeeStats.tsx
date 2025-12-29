@@ -8,6 +8,7 @@ import {
   UserCog,
   IndianRupee,
 } from "lucide-react";
+import { formatIndianNumber, formatIndianCurrency } from "@/lib/utils";
 
 interface EmployeeStatsType {
   totalEmployees: number;
@@ -96,13 +97,15 @@ export function EmployeeStats({ stats, loading }: EmployeeStatsProps) {
               ) : (
                 <span className="font-semibold text-base">
                   {card.isCurrency
-                    ? `₹${
-                        stats
-                          ? Math.round(stats[card.key] || 0).toLocaleString()
-                          : "-"
-                      }`
+                    ? formatIndianCurrency(Math.round(stats?.[card.key] || 0))
                     : stats
-                    ? stats[card.key] ?? "-"
+                    ? card.key === "totalEmployees" ||
+                      card.key === "activeEmployees" ||
+                      card.key === "inactiveEmployees" ||
+                      card.key === "terminatedEmployees" ||
+                      card.key === "onLeaveEmployees"
+                      ? stats[card.key] ?? "-"
+                      : formatIndianNumber(stats[card.key] ?? 0)
                     : "-"}
                 </span>
               )}

@@ -30,6 +30,8 @@ interface Props {
   company?: { name?: string } | null;
   gstPaidBy: string;
   serviceChargeRate: number;
+  bonusRate: number;
+  overtimeRate: number;
   existingEmployeeNames: Set<string>;
   onCreateInvoice: () => Promise<void>;
 }
@@ -41,6 +43,8 @@ export function ResultsDisplay({
   company,
   gstPaidBy,
   serviceChargeRate,
+  bonusRate,
+  overtimeRate,
   existingEmployeeNames,
   onCreateInvoice,
 }: Props) {
@@ -86,6 +90,8 @@ export function ResultsDisplay({
                     extractedData={result.extracted_data}
                     gstPaidBy={gstPaidBy}
                     serviceChargeRate={serviceChargeRate}
+                    bonusRate={bonusRate}
+                    overtimeRate={overtimeRate}
                   />
                 }
                 fileName={`${
@@ -109,6 +115,8 @@ export function ResultsDisplay({
                 data={result.extracted_data}
                 gstPaidBy={gstPaidBy}
                 serviceChargeRate={serviceChargeRate}
+                bonusRate={bonusRate}
+                overtimeRate={overtimeRate}
               />
             </div>
           </div>
@@ -249,19 +257,46 @@ function InvoiceBreakdown({
   data,
   gstPaidBy,
   serviceChargeRate,
+  bonusRate,
+  overtimeRate,
 }: {
   data: AttendanceRecord[];
   gstPaidBy: string;
   serviceChargeRate: number;
+  bonusRate: number;
+  overtimeRate: number;
 }) {
-  const totalPresentDays = data.reduce((sum, emp) => sum + emp.present_day, 0);
+  // Determine month type from total_day field (typically the max value)
+  const workingDaysInMonth = Math.max(...data.map(emp => emp.total_day || 0));
+  // Calculate overtime threshold: month days - 4 (30-4=26, 31-4=27, etc.)
+  const overtimeThreshold = workingDaysInMonth - 4;
+
+  // Calculate regular and overtime days for each employee
+  let totalRegularDays = 0;
+  let totalOvertimeDays = 0;
+
+  data.forEach(emp => {
+    const presentDays = emp.present_day;
+    if (presentDays > overtimeThreshold) {
+      totalRegularDays += overtimeThreshold;
+      totalOvertimeDays += (presentDays - overtimeThreshold);
+    } else {
+      totalRegularDays += presentDays;
+    }
+  });
+
   const perDay = 466;
-  const baseTotal = totalPresentDays * perDay;
-  const serviceCharge = baseTotal * (serviceChargeRate / 100);
-  const pf = baseTotal * 0.13;
-  const esic = baseTotal * 0.0325;
-  const subTotal = baseTotal + pf + esic;
+  const baseTotal = totalRegularDays * perDay;
+  const overtimeAmount = totalOvertimeDays * perDay * overtimeRate;
+  const totalWithOvertime = baseTotal + overtimeAmount;
+
+  // Apply PF, ESIC, and Bonus on the total (base + overtime)
+  const pf = totalWithOvertime * 0.13;
+  const esic = totalWithOvertime * 0.0325;
+  const bonus = totalWithOvertime * (bonusRate / 100);
+  const subTotal = totalWithOvertime + pf + esic + bonus;
   const roundOffSubTotal = Math.round(subTotal);
+  const serviceCharge = roundOffSubTotal * (serviceChargeRate / 100);
   const serviceChargeTotal = serviceCharge;
   const totalBeforeTax = roundOffSubTotal + serviceChargeTotal;
   const cgst = totalBeforeTax * 0.09;
@@ -287,10 +322,26 @@ function InvoiceBreakdown({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>
-                  Base Amount ({totalPresentDays} days × ₹{perDay})
+                  Regular Days ({totalRegularDays} days × ₹{perDay})
                 </span>
                 <span className="font-medium">
                   ₹{baseTotal.toLocaleString("en-IN")}
+                </span>
+              </div>
+              {totalOvertimeDays > 0 && (
+                <div className="flex justify-between">
+                  <span>
+                    Overtime ({totalOvertimeDays} days × ₹{perDay} × {overtimeRate}x)
+                  </span>
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    ₹{overtimeAmount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-2">
+                <span>Total Before Statutory</span>
+                <span className="font-medium">
+                  ₹{totalWithOvertime.toLocaleString("en-IN")}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -305,6 +356,14 @@ function InvoiceBreakdown({
                   ₹{esic.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                 </span>
               </div>
+              {bonusRate > 0 && (
+                <div className="flex justify-between">
+                  <span>Bonus @ {bonusRate}%</span>
+                  <span>
+                    ₹{bonus.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between border-t pt-2 font-medium">
                 <span>Sub Total</span>
                 <span>₹{roundOffSubTotal.toLocaleString("en-IN")}</span>

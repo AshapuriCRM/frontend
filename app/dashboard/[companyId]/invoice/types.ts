@@ -28,4 +28,9 @@ export interface RecentInvoice {
   };
   createdAt?: string | Date;
   status?: "draft" | "sent" | "paid" | string;
+  fileUrl?: string;
+  cloudinaryPublicId?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
 }

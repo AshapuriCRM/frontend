@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Users, Settings, MoreHorizontal } from "lucide-react";
+import { Users, Settings, MoreHorizontal, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 
 const adminCards = [
@@ -13,6 +13,13 @@ const adminCards = [
     title: "All Employees",
     icon: Users,
     href: "/admin/all-employees",
+    disabled: false,
+    loading: false,
+  },
+  {
+    title: "Invoice Management",
+    icon: FileText,
+    href: "/admin/invoices",
     disabled: false,
     loading: false,
   },

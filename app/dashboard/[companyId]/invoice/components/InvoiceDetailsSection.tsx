@@ -21,6 +21,10 @@ interface Props {
   setGstPaidBy: (v: string) => void;
   serviceChargeRate: number;
   setServiceChargeRate: (v: number) => void;
+  bonusRate: number;
+  setBonusRate: (v: number) => void;
+  overtimeRate: number;
+  setOvertimeRate: (v: number) => void;
 }
 
 export function InvoiceDetailsSection({
@@ -32,6 +36,10 @@ export function InvoiceDetailsSection({
   setGstPaidBy,
   serviceChargeRate,
   setServiceChargeRate,
+  bonusRate,
+  setBonusRate,
+  overtimeRate,
+  setOvertimeRate,
 }: Props) {
   return (
     <Card>
@@ -97,6 +105,44 @@ export function InvoiceDetailsSection({
               />
               <p className="text-sm text-gray-600 mt-1">
                 Service charge percentage to be applied on the base amount
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="bonus-rate">Bonus (% of Base) *</Label>
+              <Input
+                id="bonus-rate"
+                type="number"
+                value={bonusRate}
+                onChange={(e) => setBonusRate(Number(e.target.value))}
+                placeholder="Enter bonus percentage"
+                className="mt-1"
+                min={0}
+                max={100}
+                step={0.1}
+              />
+              <p className="text-sm text-gray-600 mt-1">
+                Bonus percentage to be applied on the base amount
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="overtime-rate">Overtime Rate (Multiplier) *</Label>
+              <Input
+                id="overtime-rate"
+                type="number"
+                value={overtimeRate}
+                onChange={(e) => setOvertimeRate(Number(e.target.value))}
+                placeholder="Enter overtime multiplier (e.g., 1.5)"
+                className="mt-1"
+                min={1}
+                max={3}
+                step={0.1}
+              />
+              <p className="text-sm text-gray-600 mt-1">
+                Overtime pay multiplier (1.5x means 150% of normal rate)
               </p>
             </div>
           </div>

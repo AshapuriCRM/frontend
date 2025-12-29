@@ -29,6 +29,7 @@ export interface EmployeeBankAccount {
 export interface EmployeeDocuments {
   aadhar?: string;
   pan?: string;
+  uan?: string;
   bankAccount?: EmployeeBankAccount;
   photo?: string;
 }
@@ -45,6 +46,16 @@ export interface EmployeeWorkSchedule {
   workingHours?: number;
 }
 
+export interface EmployeePF {
+  type?: "percentage" | "fixed";
+  value?: number;
+}
+
+export interface EmployeeESIC {
+  type?: "percentage" | "fixed";
+  value?: number;
+}
+
 export interface Employee {
   id?: string;
   _id?: string;
@@ -53,14 +64,16 @@ export interface Employee {
   phone: string;
   address?: EmployeeAddress;
   category: string;
-  categoryId?: string;
   dateJoined: Date;
+  dob?: Date;
   salary: number;
   status: "active" | "inactive" | "terminated" | "on-leave";
   companyId: string;
   documents?: EmployeeDocuments;
   emergencyContact?: EmployeeEmergencyContact;
   workSchedule?: EmployeeWorkSchedule;
+  pf?: EmployeePF;
+  esic?: EmployeeESIC;
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -73,14 +86,16 @@ export interface EmployeeCreateInput {
   phone: string;
   address?: EmployeeAddress;
   category: string;
-  categoryId?: string;
   dateJoined: string | Date;
+  dob?: string | Date;
   salary: number;
   companyId: string;
   status?: "active" | "inactive" | "terminated" | "on-leave";
   documents?: EmployeeDocuments;
   emergencyContact?: EmployeeEmergencyContact;
   workSchedule?: EmployeeWorkSchedule;
+  pf?: EmployeePF;
+  esic?: EmployeeESIC;
 }
 
 export interface EmployeeUpdateInput extends Partial<EmployeeCreateInput> {}
@@ -118,6 +133,11 @@ export interface Invoice {
   totalAmount: number;
   createdAt: Date;
   status: "draft" | "sent" | "paid";
+  fileUrl?: string;
+  cloudinaryPublicId?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
 }
 
 export interface SalarySlip {

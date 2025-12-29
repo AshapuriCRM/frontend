@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   Calendar,
   DollarSign,
+  Download,
   Eye,
   FileText,
   Loader2,
@@ -165,6 +166,41 @@ export function RecentInvoicesSection({
                         >
                           <Eye className="h-4 w-4" /> View
                         </Button>
+                        {invoice.fileUrl && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-2"
+                            onClick={async () => {
+                              try {
+                                // Fetch the file and trigger download
+                                const response = await fetch(invoice.fileUrl!);
+                                const blob = await response.blob();
+                                const url = URL.createObjectURL(blob);
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download = invoice.fileName || invoice.invoiceNumber || "invoice.pdf";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                URL.revokeObjectURL(url);
+                              } catch (error) {
+                                console.error("Download failed:", error);
+                                // Fallback: try to open in new tab with download flag
+                                const link = document.createElement("a");
+                                link.href = invoice.fileUrl!;
+                                link.download = invoice.fileName || invoice.invoiceNumber || "invoice.pdf";
+                                link.target = "_blank";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
+                            }}
+                            title="Download invoice"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
                         <button
                           className="p-1 rounded-md hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                           onClick={() =>

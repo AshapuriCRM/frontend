@@ -9,6 +9,7 @@ import {
   Employee,
   EmployeeCreateInput,
   EmployeeUpdateInput,
+  Company,
 } from "@/lib/types";
 import {
   Form,
@@ -29,9 +30,11 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useForm, FieldValues } from "react-hook-form";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import apiClient from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { formatIndianCurrency } from "@/lib/utils";
+import { User as UserIcon } from "lucide-react";
 
 interface EmployeeModalProps {
   open: boolean;
@@ -39,13 +42,15 @@ interface EmployeeModalProps {
   employee: Employee | null;
   onClose: () => void;
   onUpdated: () => void;
+  companies?: Company[]; // optional list for assigning company in admin create
 }
 
 type EmployeeFormValues = Omit<
   EmployeeCreateInput,
-  "dateJoined" | "salary" | "status"
+  "dateJoined" | "dob" | "salary" | "status"
 > & {
   dateJoined: string;
+  dob?: string;
   salary: number | string;
   status: "active" | "inactive" | "terminated" | "on-leave";
 };
@@ -63,9 +68,14 @@ export function EmployeeModal({
   employee,
   onClose,
   onUpdated,
+  companies,
 }: EmployeeModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | undefined>(undefined);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | undefined>(
+    undefined
+  );
   const isView = mode === "view";
   const isEdit = mode === "edit";
   const isCreate = mode === "create";
@@ -79,12 +89,15 @@ export function EmployeeModal({
         address: {},
         category: "",
         dateJoined: new Date().toISOString().slice(0, 10),
+        dob: "",
         salary: 0,
         companyId: employee?.companyId || "",
         status: "active",
         documents: {},
         emergencyContact: {},
         workSchedule: {},
+        pf: { type: "percentage", value: 12 },
+        esic: { type: "percentage", value: 0.75 },
       };
     } else if (employee) {
       return {
@@ -92,8 +105,13 @@ export function EmployeeModal({
         dateJoined: employee.dateJoined
           ? new Date(employee.dateJoined).toISOString().slice(0, 10)
           : new Date().toISOString().slice(0, 10),
+        dob: employee.dob
+          ? new Date(employee.dob).toISOString().slice(0, 10)
+          : "",
         salary: employee.salary ?? 0,
         status: employee.status ?? "active",
+        pf: employee.pf ?? { type: "percentage", value: 12 },
+        esic: employee.esic ?? { type: "percentage", value: 0.75 },
       };
     } else {
       return {
@@ -103,12 +121,15 @@ export function EmployeeModal({
         address: {},
         category: "",
         dateJoined: new Date().toISOString().slice(0, 10),
+        dob: "",
         salary: 0,
         companyId: "",
         status: "active",
         documents: {},
         emergencyContact: {},
         workSchedule: {},
+        pf: { type: "percentage", value: 12 },
+        esic: { type: "percentage", value: 0.75 },
       };
     }
   };
@@ -119,6 +140,9 @@ export function EmployeeModal({
 
   useEffect(() => {
     form.reset(getDefaultValues());
+    // reset photo state when dialog reopens or mode changes
+    setPhotoFile(undefined);
+    setPhotoPreviewUrl(undefined);
     // eslint-disable-next-line
   }, [employee, isEdit, isView, isCreate, open]);
 
@@ -132,11 +156,16 @@ export function EmployeeModal({
           typeof data.salary === "string" ? Number(data.salary) : data.salary,
         dateJoined: data.dateJoined,
       };
+      // Use multipart when photo file selected, otherwise JSON
       if (isCreate) {
-        res = await apiClient.createEmployee(payload);
+        res = photoFile
+          ? await apiClient.createEmployeeMultipart(payload, photoFile)
+          : await apiClient.createEmployee(payload);
       } else if (isEdit && employee) {
         const empId = (employee.id || employee._id) ?? "";
-        res = await apiClient.updateEmployee(empId, payload);
+        res = photoFile
+          ? await apiClient.updateEmployeeMultipart(empId, payload, photoFile)
+          : await apiClient.updateEmployee(empId, payload);
       }
       if (res?.success) {
         toast({
@@ -202,7 +231,14 @@ export function EmployeeModal({
                 : "-"}
             </div>
             <div>
-              <b>Salary:</b> ₹{employee?.salary?.toLocaleString()}
+              <b>Date of Birth:</b>{" "}
+              {employee?.dob
+                ? new Date(employee.dob).toLocaleDateString()
+                : "-"}
+            </div>
+            <div>
+              <b>Salary:</b>{" "}
+              {employee?.salary ? formatIndianCurrency(employee.salary) : "-"}
             </div>
             <div>
               <b>Status:</b> {employee?.status}
@@ -231,6 +267,9 @@ export function EmployeeModal({
                   <b>PAN:</b> {employee?.documents?.pan || "-"}
                 </div>
                 <div>
+                  <b>UAN:</b> {employee?.documents?.uan || "-"}
+                </div>
+                <div>
                   <b>Bank Account:</b>{" "}
                   {employee?.documents?.bankAccount
                     ? [
@@ -251,7 +290,9 @@ export function EmployeeModal({
                       className="h-12 w-12 rounded-full object-cover"
                     />
                   ) : (
-                    "-"
+                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                      <UserIcon className="h-6 w-6 text-muted-foreground" />
+                    </span>
                   )}
                 </div>
               </div>
@@ -284,10 +325,63 @@ export function EmployeeModal({
                     .join(", ")
                 : "-"}
             </div>
+            <div>
+              <b>PF:</b>{" "}
+              {employee?.pf
+                ? `${employee.pf.value}${
+                    employee.pf.type === "percentage" ? "%" : ""
+                  }`
+                : "-"}
+            </div>
+            <div>
+              <b>ESIC:</b>{" "}
+              {employee?.esic
+                ? `${employee.esic.value}${
+                    employee.esic.type === "percentage" ? "%" : ""
+                  }`
+                : "-"}
+            </div>
           </div>
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* Company (required when creating outside a specific company) */}
+              {(isCreate || !employee?.companyId) && (
+                <div>
+                  <FormField
+                    control={form.control}
+                    name="companyId"
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company</FormLabel>
+                        <FormControl>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            disabled={loading}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select company" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(companies || []).map((c) => (
+                                <SelectItem
+                                  key={c.id || c._id}
+                                  value={(c.id || c._id) as string}
+                                >
+                                  {c.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
               {/* Basic Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
@@ -372,6 +466,23 @@ export function EmployeeModal({
                           type="date"
                           disabled={loading}
                           required
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="dob"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Date of Birth</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="date"
+                          disabled={loading}
                         />
                       </FormControl>
                       <FormMessage />
@@ -533,6 +644,19 @@ export function EmployeeModal({
                   />
                   <FormField
                     control={form.control}
+                    name="documents.uan"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>UAN</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={loading} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name="documents.bankAccount.accountNumber"
                     render={({ field }) => (
                       <FormItem>
@@ -570,19 +694,51 @@ export function EmployeeModal({
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="documents.photo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Photo URL</FormLabel>
-                        <FormControl>
-                          <Input {...field} disabled={loading} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormItem>
+                    <FormLabel>Photo</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) {
+                              setPhotoFile(undefined);
+                              setPhotoPreviewUrl(undefined);
+                              return;
+                            }
+                            if (file.size > 5 * 1024 * 1024) {
+                              toast({
+                                title: "Image too large",
+                                description: "Max size is 5MB.",
+                                variant: "destructive",
+                              });
+                              e.currentTarget.value = "";
+                              return;
+                            }
+                            setPhotoFile(file);
+                            const url = URL.createObjectURL(file);
+                            setPhotoPreviewUrl(url);
+                          }}
+                          disabled={loading}
+                        />
+                        {(photoPreviewUrl || employee?.documents?.photo) && (
+                          // preview selected file or existing photo
+                          <img
+                            src={
+                              photoPreviewUrl ||
+                              employee?.documents?.photo ||
+                              ""
+                            }
+                            alt="Preview"
+                            className="h-12 w-12 rounded-full object-cover"
+                          />
+                        )}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 </div>
               </div>
               {/* Emergency Contact */}
@@ -700,6 +856,114 @@ export function EmployeeModal({
                       </FormItem>
                     )}
                   />
+                </div>
+              </div>
+              {/* PF & ESIC */}
+              <div className="pt-2">
+                <div className="font-semibold text-sm mb-1">PF & ESIC</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <FormLabel>PF</FormLabel>
+                    <div className="grid grid-cols-2 gap-2">
+                      <FormField
+                        control={form.control}
+                        name="pf.type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                disabled={loading}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="percentage">%</SelectItem>
+                                  <SelectItem value="fixed">Fixed</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="pf.value"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                disabled={loading}
+                                placeholder="Value"
+                                onChange={(e) =>
+                                  field.onChange(Number(e.target.value))
+                                }
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <FormLabel>ESIC</FormLabel>
+                    <div className="grid grid-cols-2 gap-2">
+                      <FormField
+                        control={form.control}
+                        name="esic.type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                disabled={loading}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="percentage">%</SelectItem>
+                                  <SelectItem value="fixed">Fixed</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="esic.value"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                disabled={loading}
+                                placeholder="Value"
+                                onChange={(e) =>
+                                  field.onChange(Number(e.target.value))
+                                }
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">

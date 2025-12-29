@@ -13,13 +13,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Loader2, Users, DollarSign } from "lucide-react";
+import { pdf } from "@react-pdf/renderer";
 
 import { InvoiceDetailsSection } from "./components/InvoiceDetailsSection";
 import { FileUploadSection } from "./components/FileUploadSection";
 import { ResultsDisplay } from "./components/ResultsDisplay";
 import { RecentInvoicesSection } from "./components/RecentInvoicesSection";
-import { formatCurrency, formatDate, normalizeName } from "./utils/index";
+import { InvoicePDF } from "./components/InvoicePDF";
+import { formatCurrency, formatDate, normalizeName, getStatusColor } from "./utils/index";
 import type { ProcessedResult, RecentInvoice } from "./types";
 
 interface InvoicePageProps {
@@ -36,12 +38,16 @@ export default function InvoicePage({ params }: InvoicePageProps) {
   const [isLoadingCompany, setIsLoadingCompany] = useState(true);
   const [gstPaidBy, setGstPaidBy] = useState("principal-employer");
   const [serviceChargeRate, setServiceChargeRate] = useState(7);
+  const [bonusRate, setBonusRate] = useState(0);
+  const [overtimeRate, setOvertimeRate] = useState(1.5);
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<RecentInvoice | null>(
     null
   );
+  const [fullInvoiceData, setFullInvoiceData] = useState<any>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isLoadingInvoiceDetails, setIsLoadingInvoiceDetails] = useState(false);
   const [isDeletingInvoice, setIsDeletingInvoice] = useState<string | null>(
     null
   );
@@ -95,18 +101,37 @@ export default function InvoicePage({ params }: InvoicePageProps) {
     if (!result?.extracted_data) return;
 
     try {
-      // Calculate the same values as shown in the frontend tables
-      const totalPresentDays = result.extracted_data.reduce(
-        (sum, emp) => sum + emp.present_day,
-        0
-      );
+      // Determine month type from total_day field (typically the max value)
+      const workingDaysInMonth = Math.max(...result.extracted_data.map(emp => emp.total_day || 0));
+      // Calculate overtime threshold: month days - 4 (30-4=26, 31-4=27, etc.)
+      const overtimeThreshold = workingDaysInMonth - 4;
+
+      // Calculate regular and overtime days for each employee
+      let totalRegularDays = 0;
+      let totalOvertimeDays = 0;
+
+      result.extracted_data.forEach(emp => {
+        const presentDays = emp.present_day;
+        if (presentDays > overtimeThreshold) {
+          totalRegularDays += overtimeThreshold;
+          totalOvertimeDays += (presentDays - overtimeThreshold);
+        } else {
+          totalRegularDays += presentDays;
+        }
+      });
+
       const perDay = 466;
-      const baseTotal = totalPresentDays * perDay;
-      const serviceCharge = baseTotal * (serviceChargeRate / 100);
-      const pf = baseTotal * 0.13;
-      const esic = baseTotal * 0.0325;
-      const subTotal = baseTotal + pf + esic;
+      const baseTotal = totalRegularDays * perDay;
+      const overtimeAmount = totalOvertimeDays * perDay * overtimeRate;
+      const totalWithOvertime = baseTotal + overtimeAmount;
+
+      // Apply PF, ESIC, and Bonus on the total (base + overtime)
+      const pf = totalWithOvertime * 0.13;
+      const esic = totalWithOvertime * 0.0325;
+      const bonus = totalWithOvertime * (bonusRate / 100);
+      const subTotal = totalWithOvertime + pf + esic + bonus;
       const roundOffSubTotal = Math.round(subTotal);
+      const serviceCharge = roundOffSubTotal * (serviceChargeRate / 100);
       const serviceChargeTotal = serviceCharge;
       const totalBeforeTax = roundOffSubTotal + serviceChargeTotal;
       const cgst = totalBeforeTax * 0.09;
@@ -116,20 +141,59 @@ export default function InvoicePage({ params }: InvoicePageProps) {
           ? Math.round(totalBeforeTax + cgst + sgst)
           : Math.round(totalBeforeTax);
 
-      // Create the exact payload with calculated values
+      // Generate a temporary invoice number for the PDF file
+      const year = new Date().getFullYear();
+      const tempInvoiceNumber = `INV-${year}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
+
+      // Generate PDF as Blob
+      const pdfDoc = (
+        <InvoicePDF
+          totalEmployees={result.extracted_data.length}
+          totalPresentDays={result.extracted_data.reduce((sum, emp) => sum + emp.present_day, 0)}
+          perDay={perDay}
+          billTo={billTo || company?.name || "Company"}
+          extractedData={result.extracted_data}
+          gstPaidBy={gstPaidBy}
+          serviceChargeRate={serviceChargeRate}
+          bonusRate={bonusRate}
+          overtimeRate={overtimeRate}
+        />
+      );
+
+      const blob = await pdf(pdfDoc).toBlob();
+      const pdfFile = new File([blob], `${tempInvoiceNumber}.pdf`, { type: "application/pdf" });
+
+      // Upload PDF to Cloudinary
+      const uploadResponse = await apiClient.uploadInvoiceFile(pdfFile, tempInvoiceNumber);
+
+      if (!uploadResponse.success || !uploadResponse.data) {
+        throw new Error("Failed to upload invoice file to Cloudinary");
+      }
+
+      // Create the exact payload with calculated values and Cloudinary file data
       const invoicePayload = {
         companyId: params.companyId,
         attendanceData: result.extracted_data,
+        fileUrl: uploadResponse.data.fileUrl,
+        cloudinaryPublicId: uploadResponse.data.publicId,
+        fileName: uploadResponse.data.fileName,
+        fileType: uploadResponse.data.fileType,
+        fileSize: uploadResponse.data.fileSize,
         gstPaidBy: gstPaidBy,
         serviceChargeRate: serviceChargeRate,
+        bonusRate: bonusRate,
+        overtimeRate: overtimeRate,
         calculatedValues: {
           totalEmployees: result.extracted_data.length,
-          totalPresentDays: totalPresentDays,
+          totalPresentDays: totalRegularDays + totalOvertimeDays,
           perDayRate: perDay,
           baseTotal: baseTotal,
+          overtimeAmount: overtimeAmount,
+          totalOvertimeDays: totalOvertimeDays,
           serviceCharge: serviceChargeTotal,
           pfAmount: pf,
           esicAmount: esic,
+          bonusAmount: bonus,
           subTotal: roundOffSubTotal,
           totalBeforeTax: totalBeforeTax,
           cgst: cgst,
@@ -153,9 +217,20 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         } catch (error) {
           console.error("Failed to refresh recent invoices:", error);
         }
+
+        // Download the PDF file to user's browser
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${tempInvoiceNumber}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       }
     } catch (error) {
       console.error("Failed to create invoice:", error);
+      alert("Failed to create invoice. Please try again.");
     }
   };
 
@@ -337,6 +412,10 @@ export default function InvoicePage({ params }: InvoicePageProps) {
           setGstPaidBy={setGstPaidBy}
           serviceChargeRate={serviceChargeRate}
           setServiceChargeRate={setServiceChargeRate}
+          bonusRate={bonusRate}
+          setBonusRate={setBonusRate}
+          overtimeRate={overtimeRate}
+          setOvertimeRate={setOvertimeRate}
         />
 
         <FileUploadSection
@@ -355,6 +434,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         company={company}
         gstPaidBy={gstPaidBy}
         serviceChargeRate={serviceChargeRate}
+        bonusRate={bonusRate}
+        overtimeRate={overtimeRate}
         existingEmployeeNames={existingEmployeeNames}
         onCreateInvoice={handleCreateInvoice}
       />
@@ -364,9 +445,21 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         isLoading={isLoadingInvoices}
         invoices={recentInvoices}
         company={company}
-        onView={(invoice) => {
-          setSelectedInvoice(invoice);
+        onView={async (invoice) => {
+          setIsLoadingInvoiceDetails(true);
           setIsViewModalOpen(true);
+          try {
+            const response = await apiClient.getInvoice(invoice._id || invoice.id || "");
+            if (response.success && response.data) {
+              setFullInvoiceData(response.data);
+              setSelectedInvoice(invoice);
+            }
+          } catch (error) {
+            console.error("❌ Failed to fetch invoice:", error);
+            setSelectedInvoice(invoice);
+          } finally {
+            setIsLoadingInvoiceDetails(false);
+          }
         }}
         onDelete={(id) => handleDeleteInvoice(id)}
         deletingId={isDeletingInvoice}
@@ -411,21 +504,31 @@ export default function InvoicePage({ params }: InvoicePageProps) {
 
       {/* Invoice View Modal */}
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" /> Invoice Details
             </DialogTitle>
           </DialogHeader>
-          {selectedInvoice && (
+          {isLoadingInvoiceDetails ? (
+            <div className="space-y-4 py-8">
+              <div className="flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+              <p className="text-center text-muted-foreground">
+                Loading invoice details...
+              </p>
+            </div>
+          ) : fullInvoiceData ? (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              {/* Header Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-4 border-b">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
                     Invoice Number
                   </Label>
                   <p className="text-lg font-semibold">
-                    {selectedInvoice.invoiceNumber || "—"}
+                    {fullInvoiceData.invoiceNumber || "—"}
                   </p>
                 </div>
                 <div>
@@ -433,26 +536,23 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                     Status
                   </Label>
                   <div className="mt-1">
-                    <Badge className={`${/* reuse class builder */ ""}`}>
-                      {(selectedInvoice.status || "draft")
+                    <Badge className={getStatusColor(fullInvoiceData.status || "draft")}>
+                      {(fullInvoiceData.status || "draft")
                         .charAt(0)
                         .toUpperCase() +
-                        (selectedInvoice.status || "draft").slice(1)}
+                        (fullInvoiceData.status || "draft").slice(1)}
                     </Badge>
                   </div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
                     Company
                   </Label>
-                  <p className="text-base">
-                    {typeof selectedInvoice.companyId === "object" &&
-                    selectedInvoice.companyId?.name
-                      ? selectedInvoice.companyId.name
-                      : selectedInvoice.companyName || company?.name}
+                  <p className="text-base font-medium">
+                    {typeof fullInvoiceData.companyId === "object" &&
+                    fullInvoiceData.companyId?.name
+                      ? fullInvoiceData.companyId.name
+                      : company?.name}
                   </p>
                 </div>
                 <div>
@@ -460,53 +560,220 @@ export default function InvoicePage({ params }: InvoicePageProps) {
                     Date Created
                   </Label>
                   <p className="text-base">
-                    {formatDate(selectedInvoice.createdAt || new Date())}
+                    {formatDate(fullInvoiceData.createdAt || new Date())}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Total Amount
-                  </Label>
-                  <p className="text-2xl font-bold text-green-600">
-                    {formatCurrency(selectedInvoice.billDetails?.totalAmount)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Employees
-                  </Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-base">
-                      {selectedInvoice.attendanceData?.totalEmployees ||
-                        selectedInvoice.employeeCount ||
-                        0}{" "}
-                      employees
-                    </span>
+              {/* Employee Attendance Table */}
+              {fullInvoiceData.processedData?.extractedEmployees && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Employee Attendance Breakdown
+                  </h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-sm font-medium">
+                              Employee Name
+                            </th>
+                            <th className="px-4 py-3 text-center text-sm font-medium">
+                              Present Days
+                            </th>
+                            <th className="px-4 py-3 text-center text-sm font-medium">
+                              Regular Days
+                            </th>
+                            <th className="px-4 py-3 text-center text-sm font-medium">
+                              Overtime Days
+                            </th>
+                            <th className="px-4 py-3 text-right text-sm font-medium">
+                              Total Salary
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {fullInvoiceData.processedData.extractedEmployees.map(
+                            (emp: any, idx: number) => (
+                              <tr
+                                key={emp._id || idx}
+                                className="hover:bg-muted/50 transition-colors"
+                              >
+                                <td className="px-4 py-3 font-medium">
+                                  {emp.name}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Badge variant="outline">{emp.presentDays}</Badge>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {emp.regularDays}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {emp.overtimeDays > 0 ? (
+                                    <Badge variant="secondary" className="bg-green-100 text-green-700">
+                                      {emp.overtimeDays}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-muted-foreground">0</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right font-medium">
+                                  {formatCurrency(emp.salary)}
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Invoice Breakdown */}
+              {fullInvoiceData.billDetails && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Invoice Breakdown
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Calculations */}
+                    <div className="border rounded-lg p-4 space-y-3">
+                      <h4 className="font-medium text-sm text-muted-foreground mb-3">
+                        Basic Calculation
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Base Amount</span>
+                          <span className="font-medium">
+                            {formatCurrency(fullInvoiceData.billDetails.baseAmount)}
+                          </span>
+                        </div>
+                        {fullInvoiceData.billDetails.overtimeAmount > 0 && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Overtime Amount</span>
+                            <span className="font-medium">
+                              {formatCurrency(fullInvoiceData.billDetails.overtimeAmount)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span>PF Amount (13%)</span>
+                          <span className="font-medium">
+                            {formatCurrency(fullInvoiceData.billDetails.pfAmount)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>ESIC Amount (3.25%)</span>
+                          <span className="font-medium">
+                            {formatCurrency(fullInvoiceData.billDetails.esicAmount)}
+                          </span>
+                        </div>
+                        {fullInvoiceData.billDetails.bonusAmount > 0 && (
+                          <div className="flex justify-between">
+                            <span>Bonus Amount</span>
+                            <span className="font-medium">
+                              {formatCurrency(fullInvoiceData.billDetails.bonusAmount)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Service & Tax */}
+                    <div className="border rounded-lg p-4 space-y-3">
+                      <h4 className="font-medium text-sm text-muted-foreground mb-3">
+                        Service & Tax
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Service Charge ({fullInvoiceData.serviceChargeRate}%)</span>
+                          <span className="font-medium">
+                            {formatCurrency(fullInvoiceData.billDetails.serviceCharge)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>GST Amount (18%)</span>
+                          <span className="font-medium">
+                            {formatCurrency(fullInvoiceData.billDetails.gstAmount)}
+                          </span>
+                        </div>
+                        <div className="pt-2 border-t">
+                          <div className="flex justify-between text-base">
+                            <span className="font-semibold">Total Amount</span>
+                            <span className="font-bold text-green-600 text-lg">
+                              {formatCurrency(fullInvoiceData.billDetails.totalAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+                    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground">Total Employees</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {fullInvoiceData.attendanceData?.totalEmployees || 0}
+                      </p>
+                    </div>
+                    <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground">Total Present Days</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {fullInvoiceData.attendanceData?.totalPresentDays || 0}
+                      </p>
+                    </div>
+                    <div className="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground">Overtime Days</p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {fullInvoiceData.attendanceData?.totalOvertimeDays || 0}
+                      </p>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground">Per Day Rate</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        ₹{fullInvoiceData.attendanceData?.perDayRate || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button
                   variant="outline"
-                  onClick={() => setIsViewModalOpen(false)}
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    setFullInvoiceData(null);
+                  }}
                 >
                   Close
                 </Button>
                 <Button
                   className="flex items-center gap-2"
                   onClick={() => {
-                    alert(
-                      "PDF download functionality will be implemented for individual invoices"
-                    );
+                    if (fullInvoiceData.fileUrl) {
+                      // Check if it's a full URL (Cloudinary) or relative path
+                      const downloadUrl = fullInvoiceData.fileUrl.startsWith('http')
+                        ? fullInvoiceData.fileUrl
+                        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}${fullInvoiceData.fileUrl}`;
+                      window.open(downloadUrl, "_blank");
+                    } else {
+                      alert("PDF file not available for this invoice");
+                    }
                   }}
                 >
                   <Download className="h-4 w-4" /> Download PDF
                 </Button>
               </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No invoice data available</p>
             </div>
           )}
         </DialogContent>

@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2, User as UserIcon } from "lucide-react";
 import { useState } from "react";
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import apiClient from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { formatIndianCurrency } from "@/lib/utils";
 
 interface EmployeeListItemProps {
   employee: Employee;
@@ -84,7 +85,9 @@ export function EmployeeListItem({
           src={employee?.documents?.photo || undefined}
           alt={employee.name}
         />
-        <AvatarFallback>{employee.name?.[0]}</AvatarFallback>
+        <AvatarFallback>
+          <UserIcon className="h-4 w-4" />
+        </AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -100,7 +103,9 @@ export function EmployeeListItem({
         </div>
         <div className="text-xs text-muted-foreground truncate">
           {employee.category}{" "}
-          {employee.salary ? `• ₹${employee.salary.toLocaleString()}` : null}
+          {employee.salary
+            ? `• ${formatIndianCurrency(employee.salary)}`
+            : null}
         </div>
       </div>
       <div className="flex gap-1">

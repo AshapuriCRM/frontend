@@ -240,6 +240,85 @@ class ApiClient {
     });
   }
 
+  /**
+   * Create employee with optional photo file via multipart/form-data.
+   * Nested objects are JSON.stringified on the form data to match backend parsing.
+   */
+  async createEmployeeMultipart(
+    employeeData: EmployeeCreateInput,
+    photoFile?: File
+  ): Promise<ApiResponse<Employee>> {
+    const form = new FormData();
+    // primitives
+    if (employeeData.name) form.append("name", employeeData.name);
+    if (employeeData.email) form.append("email", employeeData.email);
+    if (employeeData.phone) form.append("phone", employeeData.phone);
+    if (employeeData.category) form.append("category", employeeData.category);
+    if (typeof employeeData.salary !== "undefined")
+      form.append("salary", String(employeeData.salary));
+    if (employeeData.companyId)
+      form.append("companyId", String(employeeData.companyId));
+    if (employeeData.status) form.append("status", String(employeeData.status));
+    if (employeeData.dateJoined)
+      form.append(
+        "dateJoined",
+        typeof employeeData.dateJoined === "string"
+          ? employeeData.dateJoined
+          : new Date(employeeData.dateJoined).toISOString()
+      );
+    // nested JSON fields (omit documents.photo; backend will use uploaded file)
+    if (employeeData.address)
+      form.append("address", JSON.stringify(employeeData.address));
+    if (employeeData.documents) {
+      const { photo, aadhar, pan, bankAccount, ...restDocs } =
+        employeeData.documents;
+      const docsPayload: Record<string, any> = { ...restDocs };
+      if (aadhar) docsPayload.aadhar = aadhar;
+      if (pan) docsPayload.pan = pan;
+      if (bankAccount) docsPayload.bankAccount = bankAccount;
+      // keep full JSON (without photo) for controller parsing
+      form.append("documents", JSON.stringify(docsPayload));
+      // duplicate critical fields in flattened form for validator to see
+      if (aadhar) form.append("documents.aadhar", String(aadhar));
+      if (pan) form.append("documents.pan", String(pan));
+      if (bankAccount) {
+        if (bankAccount.accountNumber)
+          form.append(
+            "documents.bankAccount.accountNumber",
+            String(bankAccount.accountNumber)
+          );
+        if (bankAccount.ifscCode)
+          form.append(
+            "documents.bankAccount.ifscCode",
+            String(bankAccount.ifscCode)
+          );
+        if (bankAccount.bankName)
+          form.append(
+            "documents.bankAccount.bankName",
+            String(bankAccount.bankName)
+          );
+      }
+    }
+    if (employeeData.emergencyContact)
+      form.append(
+        "emergencyContact",
+        JSON.stringify(employeeData.emergencyContact)
+      );
+    if (employeeData.workSchedule)
+      form.append("workSchedule", JSON.stringify(employeeData.workSchedule));
+
+    if (photoFile) form.append("photo", photoFile);
+
+    const url = `${this.baseURL}/api/employees`;
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: this.token ? `Bearer ${this.token}` : "",
+      },
+      body: form,
+    }).then((res) => res.json());
+  }
+
   async getEmployees(filters?: EmployeeFilters): Promise<
     ApiResponse<{
       employees: Employee[];
@@ -276,6 +355,90 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(employeeData),
     });
+  }
+
+  /**
+   * Update employee with optional photo via multipart/form-data.
+   */
+  async updateEmployeeMultipart(
+    id: string,
+    employeeData: EmployeeUpdateInput,
+    photoFile?: File
+  ): Promise<ApiResponse<Employee>> {
+    const form = new FormData();
+    // primitives (send only when defined)
+    if (typeof employeeData.name !== "undefined")
+      form.append("name", String(employeeData.name));
+    if (typeof employeeData.email !== "undefined")
+      form.append("email", String(employeeData.email));
+    if (typeof employeeData.phone !== "undefined")
+      form.append("phone", String(employeeData.phone));
+    if (typeof employeeData.category !== "undefined")
+      form.append("category", String(employeeData.category));
+    if (typeof employeeData.salary !== "undefined")
+      form.append("salary", String(employeeData.salary));
+    if (typeof employeeData.companyId !== "undefined")
+      form.append("companyId", String(employeeData.companyId));
+    if (typeof employeeData.status !== "undefined")
+      form.append("status", String(employeeData.status));
+    if (typeof employeeData.dateJoined !== "undefined")
+      form.append(
+        "dateJoined",
+        typeof employeeData.dateJoined === "string"
+          ? employeeData.dateJoined
+          : new Date(employeeData.dateJoined).toISOString()
+      );
+
+    // nested JSON
+    if (typeof employeeData.address !== "undefined")
+      form.append("address", JSON.stringify(employeeData.address));
+    if (typeof employeeData.documents !== "undefined") {
+      const { photo, aadhar, pan, bankAccount, ...restDocs } =
+        employeeData.documents || {};
+      const docsPayload: Record<string, any> = { ...restDocs };
+      if (aadhar) docsPayload.aadhar = aadhar;
+      if (pan) docsPayload.pan = pan;
+      if (bankAccount) docsPayload.bankAccount = bankAccount;
+      form.append("documents", JSON.stringify(docsPayload));
+      // flattened copies for validator (non-empty only)
+      if (aadhar) form.append("documents.aadhar", String(aadhar));
+      if (pan) form.append("documents.pan", String(pan));
+      if (bankAccount) {
+        if (bankAccount.accountNumber)
+          form.append(
+            "documents.bankAccount.accountNumber",
+            String(bankAccount.accountNumber)
+          );
+        if (bankAccount.ifscCode)
+          form.append(
+            "documents.bankAccount.ifscCode",
+            String(bankAccount.ifscCode)
+          );
+        if (bankAccount.bankName)
+          form.append(
+            "documents.bankAccount.bankName",
+            String(bankAccount.bankName)
+          );
+      }
+    }
+    if (typeof employeeData.emergencyContact !== "undefined")
+      form.append(
+        "emergencyContact",
+        JSON.stringify(employeeData.emergencyContact)
+      );
+    if (typeof employeeData.workSchedule !== "undefined")
+      form.append("workSchedule", JSON.stringify(employeeData.workSchedule));
+
+    if (photoFile) form.append("photo", photoFile);
+
+    const url = `${this.baseURL}/api/employees/${id}`;
+    return fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: this.token ? `Bearer ${this.token}` : "",
+      },
+      body: form,
+    }).then((res) => res.json());
   }
 
   async deleteEmployee(id: string): Promise<ApiResponse<{ message: string }>> {
@@ -358,6 +521,37 @@ class ApiClient {
     }).then((res) => res.json());
   }
 
+  /**
+   * Upload invoice file to Cloudinary
+   */
+  async uploadInvoiceFile(
+    file: File,
+    invoiceNumber?: string
+  ): Promise<
+    ApiResponse<{
+      fileUrl: string;
+      publicId: string;
+      fileName: string;
+      fileType: string;
+      fileSize: number;
+    }>
+  > {
+    const formData = new FormData();
+    formData.append("invoiceFile", file);
+    if (invoiceNumber) {
+      formData.append("invoiceNumber", invoiceNumber);
+    }
+
+    const url = `${this.baseURL}/api/invoices/upload-file`;
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: this.token ? `Bearer ${this.token}` : "",
+      },
+      body: formData,
+    }).then((res) => res.json());
+  }
+
   async getCompanyInvoices(
     companyId: string,
     filters?: {
@@ -430,16 +624,26 @@ class ApiClient {
   async createInvoice(invoiceData: {
     companyId: string;
     attendanceData: any[];
+    fileUrl?: string;
+    cloudinaryPublicId?: string;
+    fileName?: string;
+    fileType?: string;
+    fileSize?: number;
     gstPaidBy: string;
     serviceChargeRate: number;
+    bonusRate?: number;
+    overtimeRate?: number;
     calculatedValues?: {
       totalEmployees: number;
       totalPresentDays: number;
       perDayRate: number;
       baseTotal: number;
+      overtimeAmount?: number;
+      totalOvertimeDays?: number;
       serviceCharge: number;
       pfAmount: number;
       esicAmount: number;
+      bonusAmount?: number;
       subTotal: number;
       totalBeforeTax: number;
       cgst: number;
@@ -455,6 +659,164 @@ class ApiClient {
 
   async getAllInvoices() {
     return this.request("/api/invoices", { method: "GET" });
+  }
+
+  // Admin Invoice API methods
+  async getAdminInvoices(filters?: {
+    status?: string;
+    paymentStatus?: string;
+    companyId?: string;
+    isMerged?: boolean;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+  }): Promise<
+    ApiResponse<{
+      invoices: any[];
+      pagination: {
+        total: number;
+        pages: number;
+        page: number;
+        limit: number;
+      };
+    }>
+  > {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    return this.request(`/api/admin/invoices${query ? `?${query}` : ""}`);
+  }
+
+  async getAdminInvoiceStats(): Promise<
+    ApiResponse<{
+      overall: {
+        totalInvoices: number;
+        totalAmount: number;
+        mergedCount: number;
+        regularCount: number;
+      };
+      byStatus: Array<{ _id: string; count: number; amount: number }>;
+      byPaymentStatus: Array<{ _id: string; count: number; amount: number }>;
+      byCompany: Array<{
+        company: string;
+        companyId: string;
+        count: number;
+        amount: number;
+      }>;
+      recentMerged: any[];
+    }>
+  > {
+    return this.request("/api/admin/invoices/stats");
+  }
+
+  async getInvoicesAvailableForMerge(filters?: {
+    companyId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<
+    ApiResponse<{
+      invoices: any[];
+      pagination: {
+        total: number;
+        pages: number;
+        page: number;
+        limit: number;
+      };
+    }>
+  > {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    return this.request(
+      `/api/admin/invoices/available-for-merge${query ? `?${query}` : ""}`
+    );
+  }
+
+  async mergeInvoices(
+    invoiceIds: string[],
+    notes?: string
+  ): Promise<
+    ApiResponse<{
+      mergedInvoice: any;
+      sourceInvoiceSummary: Array<{
+        id: string;
+        invoiceNumber: string;
+        company: string;
+        totalAmount: number;
+      }>;
+    }>
+  > {
+    return this.request("/api/admin/invoices/merge", {
+      method: "POST",
+      body: JSON.stringify({ invoiceIds, notes }),
+    });
+  }
+
+  async getMergedInvoices(filters?: {
+    status?: string;
+    paymentStatus?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+  }): Promise<
+    ApiResponse<{
+      invoices: any[];
+      pagination: {
+        total: number;
+        pages: number;
+        page: number;
+        limit: number;
+      };
+    }>
+  > {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    return this.request(`/api/admin/invoices/merged${query ? `?${query}` : ""}`);
+  }
+
+  async getMergedInvoiceDetails(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/admin/invoices/merged/${id}`);
+  }
+
+  async deleteMergedInvoice(
+    id: string
+  ): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/admin/invoices/merged/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async downloadAdminInvoice(
+    id: string
+  ): Promise<
+    ApiResponse<{ downloadUrl: string; fileName: string; fileType: string }>
+  > {
+    return this.request(`/api/admin/invoices/${id}/download`);
   }
 
   // AI API methods

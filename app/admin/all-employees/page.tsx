@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Search, Plus } from "lucide-react";
 import apiClient from "@/lib/api-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Employee } from "@/lib/types";
+import { Employee, Company } from "@/lib/types";
 
 export default function AllEmployeesPage() {
   const { toast } = useToast();
@@ -36,6 +36,7 @@ export default function AllEmployeesPage() {
     totalSalaryExpense: number;
   }
   const [stats, setStats] = useState<EmployeeStatsType | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -62,6 +63,15 @@ export default function AllEmployeesPage() {
 
   useEffect(() => {
     fetchStats();
+    // fetch first page of companies (or all if backend allows)
+    (async () => {
+      try {
+        const res = await apiClient.getCompanies({ limit: 1000 });
+        if (res.success && res.data) setCompanies(res.data.companies || []);
+      } catch (_e) {
+        // non-blocking
+      }
+    })();
   }, []);
 
   const fetchEmployees = useCallback(
@@ -193,6 +203,7 @@ export default function AllEmployeesPage() {
             employee={selectedEmployee}
             onClose={handleModalClose}
             onUpdated={handleEmployeeUpdated}
+            companies={companies}
           />
         </div>
       </TooltipProvider>

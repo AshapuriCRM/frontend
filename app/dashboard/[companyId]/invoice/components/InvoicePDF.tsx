@@ -170,6 +170,8 @@ export interface InvoicePDFProps {
   extractedData: AttendanceRecord[];
   gstPaidBy: string;
   serviceChargeRate: number;
+  bonusRate: number;
+  overtimeRate: number;
 }
 
 export function InvoicePDF({
@@ -180,10 +182,13 @@ export function InvoicePDF({
   extractedData,
   gstPaidBy,
   serviceChargeRate,
+  bonusRate,
+  overtimeRate,
 }: InvoicePDFProps) {
   const SERVICE_CHARGE_RATE = serviceChargeRate / 100;
   const PF_RATE = 0.13;
   const ESIC_RATE = 0.0325;
+  const BONUS_RATE = bonusRate / 100;
   const CGST_RATE = 0.09;
   const SGST_RATE = 0.09;
 
@@ -208,12 +213,36 @@ export function InvoicePDF({
     })
     .toUpperCase();
 
-  const baseTotal = Number(totalPresentDays) * Number(perDay);
-  const serviceCharge = baseTotal * SERVICE_CHARGE_RATE;
-  const pf = baseTotal * PF_RATE;
-  const esic = baseTotal * ESIC_RATE;
-  const subTotal = baseTotal + pf + esic;
+  // Determine month type from total_day field (typically the max value)
+  const workingDaysInMonth = Math.max(...extractedData.map(emp => emp.total_day || 0));
+  // Calculate overtime threshold: month days - 4 (30-4=26, 31-4=27, etc.)
+  const overtimeThreshold = workingDaysInMonth - 4;
+
+  // Calculate regular and overtime days for each employee
+  let totalRegularDays = 0;
+  let totalOvertimeDays = 0;
+
+  extractedData.forEach(emp => {
+    const presentDays = emp.present_day;
+    if (presentDays > overtimeThreshold) {
+      totalRegularDays += overtimeThreshold;
+      totalOvertimeDays += (presentDays - overtimeThreshold);
+    } else {
+      totalRegularDays += presentDays;
+    }
+  });
+
+  const baseTotal = totalRegularDays * Number(perDay);
+  const overtimeAmount = totalOvertimeDays * Number(perDay) * overtimeRate;
+  const totalWithOvertime = baseTotal + overtimeAmount;
+
+  // Apply PF, ESIC, and Bonus on the total (base + overtime)
+  const pf = totalWithOvertime * PF_RATE;
+  const esic = totalWithOvertime * ESIC_RATE;
+  const bonus = totalWithOvertime * BONUS_RATE;
+  const subTotal = totalWithOvertime + pf + esic + bonus;
   const roundOffSubTotal = Math.round(subTotal);
+  const serviceCharge = roundOffSubTotal * SERVICE_CHARGE_RATE;
   const serviceChargeTotal = serviceCharge;
   const totalBeforeTax = roundOffSubTotal + serviceChargeTotal;
   const cgst = totalBeforeTax * CGST_RATE;
@@ -299,13 +328,27 @@ export function InvoicePDF({
               <Text
                 style={[styles.tableCell, styles.tableCellLeft, { flex: 2 }]}
               >
-                SECURITY SERVICES
+                SECURITY SERVICES (Regular)
               </Text>
               <Text style={styles.tableCell}>998514</Text>
-              <Text style={styles.tableCell}>{totalPresentDays}</Text>
+              <Text style={styles.tableCell}>{totalRegularDays}</Text>
               <Text style={styles.tableCell}>{Number(perDay).toFixed(2)}</Text>
               <Text style={styles.tableCell}>{baseTotal.toFixed(2)}</Text>
             </View>
+            {totalOvertimeDays > 0 && (
+              <View style={styles.tableRow}>
+                <Text style={[styles.tableCell, { flex: 0.5 }]}>2</Text>
+                <Text
+                  style={[styles.tableCell, styles.tableCellLeft, { flex: 2 }]}
+                >
+                  OVERTIME ({overtimeRate}x rate)
+                </Text>
+                <Text style={styles.tableCell}>998514</Text>
+                <Text style={styles.tableCell}>{totalOvertimeDays}</Text>
+                <Text style={styles.tableCell}>{(Number(perDay) * overtimeRate).toFixed(2)}</Text>
+                <Text style={styles.tableCell}>{overtimeAmount.toFixed(2)}</Text>
+              </View>
+            )}
             <View style={styles.tableRow}>
               <Text
                 style={[
@@ -315,13 +358,14 @@ export function InvoicePDF({
               >
                 TOTAL
               </Text>
-              <Text style={styles.tableCell}>{baseTotal.toFixed(2)}</Text>
+              <Text style={styles.tableCell}>{totalWithOvertime.toFixed(2)}</Text>
             </View>
           </View>
           <View style={styles.totalsSection}>
             <View style={styles.calculations}>
               <Text>PF @13%</Text>
               <Text>ESIC @3.25%</Text>
+              {bonusRate > 0 && <Text>Bonus @{bonusRate}%</Text>}
               <Text style={{ marginTop: 5, fontWeight: "bold" }}>
                 SUB TOTAL
               </Text>
@@ -338,6 +382,12 @@ export function InvoicePDF({
                 <Text></Text>
                 <Text>{esic.toFixed(2)}</Text>
               </View>
+              {bonusRate > 0 && (
+                <View style={styles.totalRow}>
+                  <Text></Text>
+                  <Text>{bonus.toFixed(2)}</Text>
+                </View>
+              )}
               <View style={styles.totalRow}>
                 <Text>TOTAL</Text>
                 <Text>{subTotal.toFixed(2)}</Text>

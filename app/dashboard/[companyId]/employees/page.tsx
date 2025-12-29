@@ -61,6 +61,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { User as UserIcon } from "lucide-react";
 
 interface EmployeesPageProps {
   params: { companyId: string };
@@ -106,13 +107,14 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
       country: "India",
     },
     category: "",
-    categoryId: "",
     dateJoined: new Date().toISOString().substring(0, 10),
+    dob: "",
     salary: 0,
     status: "active" as "active" | "inactive" | "terminated" | "on-leave",
     documents: {
       aadhar: "",
       pan: "",
+      uan: "",
       bankAccount: {
         accountNumber: "",
         ifscCode: "",
@@ -130,7 +132,17 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
       workingDays: 26,
       workingHours: 8,
     },
+    pf: {
+      type: "percentage" as "percentage" | "fixed",
+      value: 12,
+    },
+    esic: {
+      type: "percentage" as "percentage" | "fixed",
+      value: 0.75,
+    },
   });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -192,20 +204,25 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
         country: "India",
       },
       category: "",
-      categoryId: "",
       dateJoined: new Date().toISOString().substring(0, 10),
+      dob: "",
       salary: 0,
       status: "active",
       documents: {
         aadhar: "",
         pan: "",
+        uan: "",
         bankAccount: { accountNumber: "", ifscCode: "", bankName: "" },
         photo: "",
       },
       emergencyContact: { name: "", relationship: "", phone: "" },
       workSchedule: { shiftType: "day", workingDays: 26, workingHours: 8 },
+      pf: { type: "percentage", value: 12 },
+      esic: { type: "percentage", value: 0.75 },
     });
     setEditingEmployee(null);
+    setPhotoFile(null);
+    setPhotoPreviewUrl(null);
   };
 
   const handleSubmit = async () => {
@@ -222,23 +239,23 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
       return;
     }
 
-    // Build payload and only include categoryId if non-empty
     const payload: any = {
       ...formData,
       dateJoined: formData.dateJoined,
       companyId: params.companyId,
     };
-    if (!formData.categoryId || formData.categoryId.trim() === "") {
-      delete payload.categoryId;
-    }
 
     try {
       if (editingEmployee) {
         setIsUpdating(true);
-        const response = await apiClient.updateEmployee(
-          (editingEmployee as any).id || (editingEmployee as any)._id,
-          payload as any
-        );
+        const id = (editingEmployee as any).id || (editingEmployee as any)._id;
+        const response = photoFile
+          ? await apiClient.updateEmployeeMultipart(
+              id,
+              payload as any,
+              photoFile
+            )
+          : await apiClient.updateEmployee(id, payload as any);
         if (response.success && response.data) {
           setEmployees((prev) =>
             prev.map((emp) =>
@@ -252,7 +269,9 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
         }
       } else {
         setIsCreating(true);
-        const response = await apiClient.createEmployee(payload as any);
+        const response = photoFile
+          ? await apiClient.createEmployeeMultipart(payload as any, photoFile)
+          : await apiClient.createEmployee(payload as any);
         if (response.success && response.data) {
           setEmployees((prev) => [...prev, response.data!]);
           toast.success("Employee created successfully!");
@@ -286,15 +305,18 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
         country: employee.address?.country || "India",
       },
       category: employee.category,
-      categoryId: (employee as any).categoryId || "",
       dateJoined: employee.dateJoined
         ? new Date(employee.dateJoined as any).toISOString().substring(0, 10)
         : new Date().toISOString().substring(0, 10),
+      dob: employee.dob
+        ? new Date(employee.dob as any).toISOString().substring(0, 10)
+        : "",
       salary: employee.salary,
       status: employee.status,
       documents: {
         aadhar: employee.documents?.aadhar || "",
         pan: employee.documents?.pan || "",
+        uan: employee.documents?.uan || "",
         bankAccount: {
           accountNumber: employee.documents?.bankAccount?.accountNumber || "",
           ifscCode: employee.documents?.bankAccount?.ifscCode || "",
@@ -312,8 +334,18 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
         workingDays: employee.workSchedule?.workingDays || 26,
         workingHours: employee.workSchedule?.workingHours || 8,
       },
+      pf: {
+        type: employee.pf?.type || "percentage",
+        value: employee.pf?.value ?? 12,
+      },
+      esic: {
+        type: employee.esic?.type || "percentage",
+        value: employee.esic?.value ?? 0.75,
+      },
     });
     setIsDialogOpen(true);
+    setPhotoFile(null);
+    setPhotoPreviewUrl(null);
   };
 
   const openPreview = (employee: Employee) => {
@@ -535,6 +567,24 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="dob">Date of Birth</Label>
+                      <Input
+                        id="dob"
+                        type="date"
+                        value={formData.dob}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            dob: e.target.value,
+                          })
+                        }
+                        disabled={isCreating || isUpdating}
+                      />
+                    </div>
+                  </div>
+
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
@@ -635,22 +685,6 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="categoryId">Category ID</Label>
-                      <Input
-                        id="categoryId"
-                        value={formData.categoryId}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            categoryId: e.target.value,
-                          })
-                        }
-                        placeholder="Optional category ID"
-                        disabled={isCreating || isUpdating}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
                       <Label htmlFor="category">Category</Label>
                       <Select
                         value={formData.category}
@@ -724,7 +758,7 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                     </div>
                   </div>
                   <Separator />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="aadhar">Aadhar</Label>
                       <Input
@@ -762,22 +796,56 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="photo">Photo URL</Label>
+                      <Label htmlFor="uan">UAN</Label>
                       <Input
-                        id="photo"
-                        value={formData.documents.photo}
+                        id="uan"
+                        value={formData.documents.uan}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
                             documents: {
                               ...formData.documents,
-                              photo: e.target.value,
+                              uan: e.target.value,
                             },
                           })
                         }
-                        placeholder="https://..."
+                        placeholder="123456789012"
                         disabled={isCreating || isUpdating}
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="photo">Photo</Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="photo"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            if (!file) {
+                              setPhotoFile(null);
+                              setPhotoPreviewUrl(null);
+                              return;
+                            }
+                            if (file.size > 5 * 1024 * 1024) {
+                              toast.error("Image too large. Max size is 5MB.");
+                              (e.target as HTMLInputElement).value = "";
+                              return;
+                            }
+                            setPhotoFile(file);
+                            const url = URL.createObjectURL(file);
+                            setPhotoPreviewUrl(url);
+                          }}
+                          disabled={isCreating || isUpdating}
+                        />
+                        {(photoPreviewUrl || formData.documents.photo) && (
+                          <img
+                            src={photoPreviewUrl || formData.documents.photo}
+                            alt="Preview"
+                            className="h-12 w-12 rounded-full object-cover"
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                   <Separator />
@@ -966,6 +1034,81 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                         placeholder="8"
                         disabled={isCreating || isUpdating}
                       />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>PF (Provident Fund)</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={formData.pf.type}
+                          onValueChange={(value: "percentage" | "fixed") =>
+                            setFormData({
+                              ...formData,
+                              pf: { ...formData.pf, type: value },
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percentage">Percentage (%)</SelectItem>
+                            <SelectItem value="fixed">Fixed Amount</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={formData.pf.value}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              pf: { ...formData.pf, value: Number(e.target.value) },
+                            })
+                          }
+                          placeholder="Value"
+                          disabled={isCreating || isUpdating}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>ESIC (Employee State Insurance)</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={formData.esic.type}
+                          onValueChange={(value: "percentage" | "fixed") =>
+                            setFormData({
+                              ...formData,
+                              esic: { ...formData.esic, type: value },
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percentage">Percentage (%)</SelectItem>
+                            <SelectItem value="fixed">Fixed Amount</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={formData.esic.value}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              esic: { ...formData.esic, value: Number(e.target.value) },
+                            })
+                          }
+                          placeholder="Value"
+                          disabled={isCreating || isUpdating}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1321,6 +1464,16 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                     </div>
                     <div>
                       <span className="text-muted-foreground text-sm">
+                        Date of Birth:{" "}
+                      </span>
+                      {previewEmployee.dob
+                        ? new Date(
+                            previewEmployee.dob as any
+                          ).toLocaleDateString()
+                        : "-"}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-sm">
                         Category:{" "}
                       </span>
                       {previewEmployee.category}
@@ -1397,6 +1550,12 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                       </span>
                       {previewEmployee.documents?.pan || "-"}
                     </div>
+                    <div>
+                      <span className="text-muted-foreground text-sm">
+                        UAN:{" "}
+                      </span>
+                      {previewEmployee.documents?.uan || "-"}
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="text-muted-foreground text-sm">
@@ -1418,6 +1577,22 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                         Bank:{" "}
                       </span>
                       {previewEmployee.documents?.bankAccount?.bankName || "-"}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-sm">
+                        Photo:{" "}
+                      </span>
+                      {previewEmployee.documents?.photo ? (
+                        <img
+                          src={previewEmployee.documents.photo}
+                          alt="Photo"
+                          className="h-12 w-12 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                          <UserIcon className="h-6 w-6 text-muted-foreground" />
+                        </span>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1476,6 +1651,36 @@ export default function EmployeesPage({ params }: EmployeesPageProps) {
                         </span>
                         {previewEmployee.workSchedule?.workingHours ?? "-"}
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      PF & ESIC
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div>
+                      <span className="text-muted-foreground text-sm">
+                        PF:{" "}
+                      </span>
+                      {previewEmployee.pf
+                        ? `${previewEmployee.pf.value}${
+                            previewEmployee.pf.type === "percentage" ? "%" : ""
+                          } (${previewEmployee.pf.type})`
+                        : "-"}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-sm">
+                        ESIC:{" "}
+                      </span>
+                      {previewEmployee.esic
+                        ? `${previewEmployee.esic.value}${
+                            previewEmployee.esic.type === "percentage" ? "%" : ""
+                          } (${previewEmployee.esic.type})`
+                        : "-"}
                     </div>
                   </CardContent>
                 </Card>
