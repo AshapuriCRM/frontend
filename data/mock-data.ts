@@ -154,7 +154,7 @@ export const mockSalarySlips: SalarySlip[] = [
     year: 2024,
     daysPresent: 26,
     daysAbsent: 4,
-    bonus: 2000,
+    overtimeHours: 10,
     basicSalary: 25000,
     totalSalary: 27000,
     createdAt: new Date('2024-01-31')
@@ -168,7 +168,7 @@ export const mockSalarySlips: SalarySlip[] = [
     year: 2024,
     daysPresent: 30,
     daysAbsent: 0,
-    bonus: 3000,
+    overtimeHours: 5,
     basicSalary: 35000,
     totalSalary: 38000,
     createdAt: new Date('2024-01-31')

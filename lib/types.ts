@@ -12,31 +12,115 @@ export interface Company {
   panNumber?: string;
 }
 
+export interface EmployeeAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  pinCode?: string;
+  country?: string;
+}
+
+export interface EmployeeBankAccount {
+  accountNumber?: string;
+  ifscCode?: string;
+  bankName?: string;
+}
+
+export interface EmployeeDocuments {
+  aadhar?: string;
+  pan?: string;
+  uan?: string;
+  bankAccount?: EmployeeBankAccount;
+  photo?: string;
+}
+
+export interface EmployeeEmergencyContact {
+  name?: string;
+  relationship?: string;
+  phone?: string;
+}
+
+export interface EmployeeWorkSchedule {
+  shiftType?: "day" | "night" | "rotating";
+  workingDays?: number;
+  workingHours?: number;
+}
+
+export interface EmployeePF {
+  type?: "percentage" | "fixed";
+  value?: number;
+}
+
+export interface EmployeeESIC {
+  type?: "percentage" | "fixed";
+  value?: number;
+}
+
 export interface Employee {
   id?: string;
   _id?: string;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
+  address?: EmployeeAddress;
   category: string;
   dateJoined: Date;
+  dob?: Date;
   salary: number;
-  status: 'active' | 'inactive' | 'terminated' | 'on-leave';
+  status: "active" | "inactive" | "terminated" | "on-leave";
   companyId: string;
+  documents?: EmployeeDocuments;
+  emergencyContact?: EmployeeEmergencyContact;
+  workSchedule?: EmployeeWorkSchedule;
+  pf?: EmployeePF;
+  esic?: EmployeeESIC;
+  createdBy?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  yearsOfService?: number;
+}
+
+export interface EmployeeCreateInput {
+  name: string;
+  email?: string;
+  phone: string;
+  address?: EmployeeAddress;
+  category: string;
+  dateJoined: string | Date;
+  dob?: string | Date;
+  salary: number;
+  companyId: string;
+  status?: "active" | "inactive" | "terminated" | "on-leave";
+  documents?: EmployeeDocuments;
+  emergencyContact?: EmployeeEmergencyContact;
+  workSchedule?: EmployeeWorkSchedule;
+  pf?: EmployeePF;
+  esic?: EmployeeESIC;
+}
+
+export interface EmployeeUpdateInput extends Partial<EmployeeCreateInput> {}
+
+export interface EmployeeStatsData {
+  totalEmployees: number;
+  activeEmployees: number;
+  inactiveEmployees: number;
+  terminatedEmployees: number;
+  onLeaveEmployees: number;
+  averageSalary: number;
+  totalSalaryExpense: number;
 }
 
 export interface JobCategory {
   id: string;
   title: string;
   baseWage: number;
-  wageType?: 'monthly' | 'daily';
+  wageType?: "monthly" | "daily";
   companyId: string;
   ratesApplied?: boolean;
   gstRate?: number;
   pfRate?: number;
   esicRate?: number;
 }
-
 
 export interface Invoice {
   id: string;
@@ -48,7 +132,12 @@ export interface Invoice {
   esicAmount: number;
   totalAmount: number;
   createdAt: Date;
-  status: 'draft' | 'sent' | 'paid';
+  status: "draft" | "sent" | "paid";
+  fileUrl?: string;
+  cloudinaryPublicId?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
 }
 
 export interface SalarySlip {
@@ -60,7 +149,7 @@ export interface SalarySlip {
   year: number;
   daysPresent: number;
   daysAbsent: number;
-  bonus: number;
+  overtimeHours: number;
   basicSalary: number;
   totalSalary: number;
   createdAt: Date;
@@ -74,7 +163,7 @@ export interface Document {
   uploadedAt: Date;
   companyId: string;
   url: string;
-  folderId?: string; 
+  folderId?: string;
 }
 
 export interface DocumentFolder {
@@ -85,6 +174,26 @@ export interface DocumentFolder {
   documentCount: number;
 }
 
+export interface CompanyFolderFile {
+  _id: string;
+  name: string;
+  size?: string;
+  file_type: string;
+  file_url: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyFolder {
+  _id: string;
+  folder_name: string;
+  company_id: string;
+  soft_delete?: boolean;
+  files?: CompanyFolderFile[];
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface User {
   id: string;
