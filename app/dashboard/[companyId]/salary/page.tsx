@@ -8,14 +8,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AnimatedPage } from '@/components/ui/animated-page';
 import { Employee, SalarySlip } from '@/lib/types';
-import { Plus, Eye, Receipt, X, Loader2 } from 'lucide-react';
+import { Plus, Eye, Receipt, X, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { saveAs } from 'file-saver';
+
+// Helper to resolve file URLs that may be stored as relative paths on the API
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_ORIGIN =
+  API_BASE && /^https?:\/\//i.test(API_BASE)
+    ? API_BASE.replace(/\/api\/?$/, "")
+    : "";
+
+function resolveFileUrl(fileUrl: string | undefined | null) {
+  if (!fileUrl) return "";
+  // Absolute URL (Cloudinary or any external host)
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+  // Relative path coming from API (e.g. /uploads/salary-slips/...) -> prefix backend origin
+  if (fileUrl.startsWith("/"))
+    return API_ORIGIN ? `${API_ORIGIN}${fileUrl}` : fileUrl;
+  return API_ORIGIN ? `${API_ORIGIN}/${fileUrl}` : fileUrl;
+}
 
 interface EmployeeWithDetails extends Omit<Employee, 'id' | '_id'> {
   id: string;
@@ -54,6 +72,7 @@ export default function SalaryPage({ params }: SalaryPageProps) {
   
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewSlip, setPreviewSlip] = useState<SalarySlip | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -102,6 +121,12 @@ export default function SalaryPage({ params }: SalaryPageProps) {
         const mappedSlips = response.data.salarySlips.map((slip: any) => {
           const attendance = slip.attendance || {};
           const salary = slip.salary || {};
+          // Extract file info from xlsxFile field (if present)
+          const fileMeta: any = slip.xlsxFile || {};
+          const fileUrl: string | undefined = fileMeta.secure_url || fileMeta.url;
+          const fileName: string = fileMeta.original_filename ||
+            `${slip.employeeName || 'employee'}-${slip.month || ''}-${slip.year || ''}.xlsx`;
+
           return {
             id: String(slip.id || slip._id),
             employeeId: String(
@@ -123,7 +148,11 @@ export default function SalaryPage({ params }: SalaryPageProps) {
             basicSalary: Number(salary.basicSalary || 0),
             totalSalary: Number(slip.totalSalary || salary.grossSalary || 0),
             createdAt: new Date(slip.createdAt || Date.now()),
-          } as SalarySlip;
+            // File info for download
+            fileUrl,
+            fileName,
+            fileSize: fileMeta.bytes,
+          } as SalarySlip & { fileUrl?: string; fileName?: string; fileSize?: number };
         });
         setSalarySlips(mappedSlips);
       }
@@ -297,6 +326,40 @@ export default function SalaryPage({ params }: SalaryPageProps) {
   const handlePreview = (slip: SalarySlip) => {
     setPreviewSlip(slip);
     setIsPreviewOpen(true);
+  };
+
+  // Download salary slip file
+  const handleDownload = async (slip: any) => {
+    const slipId = slip.id || slip._id;
+    setDownloadingId(slipId);
+    try {
+      const url = resolveFileUrl(slip.fileUrl);
+      if (!url) throw new Error("No file URL available");
+
+      const response = await fetch(url, {
+        mode: "cors",
+        credentials: "omit",
+      });
+      if (!response.ok) throw new Error("Failed to fetch file");
+      const blob = await response.blob();
+
+      let fileName: string = slip.fileName || `salary-slip-${slip.employeeName}-${slip.month}-${slip.year}.xlsx`;
+      const disposition = response.headers.get("content-disposition") || "";
+      const match = /filename=\"?([^\";]+)\"?/i.exec(disposition);
+      if (match?.[1]) fileName = match[1];
+
+      saveAs(blob, fileName);
+      toast.success("Download started");
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error("Failed to download file. Trying to open in new tab...");
+      try {
+        const url = resolveFileUrl(slip.fileUrl);
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      } catch {}
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const selectedCount = tableEmployees.filter(emp => emp.isSelected).length;
@@ -890,20 +953,38 @@ export default function SalaryPage({ params }: SalaryPageProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {salarySlips.map((slip) => (
-                  <TableRow key={slip.id}>
-                    <TableCell className="font-medium">{slip.employeeName}</TableCell>
-                    <TableCell>{slip.month} {slip.year}</TableCell>
-                    <TableCell>{slip.daysPresent}</TableCell>
-                    <TableCell>{slip.overtimeHours}</TableCell>
-                    <TableCell>₹{slip.totalSalary.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => handlePreview(slip)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {salarySlips.map((slip) => {
+                  const hasFile = Boolean((slip as any).fileUrl);
+                  return (
+                    <TableRow key={slip.id}>
+                      <TableCell className="font-medium">{slip.employeeName}</TableCell>
+                      <TableCell>{slip.month} {slip.year}</TableCell>
+                      <TableCell>{slip.daysPresent}</TableCell>
+                      <TableCell>{slip.overtimeHours}</TableCell>
+                      <TableCell>₹{slip.totalSalary.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => handlePreview(slip)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDownload(slip)}
+                            disabled={!hasFile || downloadingId === slip.id}
+                            title={hasFile ? "Download salary slip" : "No file available"}
+                          >
+                            {downloadingId === slip.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className={`h-4 w-4 ${!hasFile ? 'opacity-30' : ''}`} />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -917,6 +998,9 @@ export default function SalaryPage({ params }: SalaryPageProps) {
                 <Receipt className="h-5 w-5" />
                 Salary Slip Preview
               </DialogTitle>
+              <DialogDescription>
+                View salary slip details and download the file if available.
+              </DialogDescription>
             </DialogHeader>
             {previewSlip && (
               <div className="space-y-6">
@@ -964,6 +1048,32 @@ export default function SalaryPage({ params }: SalaryPageProps) {
                     </TableRow>
                   </TableBody>
                 </Table>
+
+                {/* Download Button */}
+                <div className="flex justify-end gap-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsPreviewOpen(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    onClick={() => handleDownload(previewSlip)}
+                    disabled={!(previewSlip as any).fileUrl || downloadingId === previewSlip.id}
+                  >
+                    {downloadingId === previewSlip.id ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="mr-2 h-4 w-4" />
+                        {(previewSlip as any).fileUrl ? "Download Salary Slip" : "No file available"}
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>
