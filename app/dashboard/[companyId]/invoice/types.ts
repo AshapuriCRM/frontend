@@ -5,6 +5,7 @@ export interface AttendanceRecord {
   present_day: number;
   total_day?: number;
   absent_day?: number;
+  overtime_days?: number;
 }
 
 export interface ProcessedResult {

@@ -39,7 +39,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
   const [gstPaidBy, setGstPaidBy] = useState("principal-employer");
   const [serviceChargeRate, setServiceChargeRate] = useState(7);
   const [bonusRate, setBonusRate] = useState(0);
-  const [overtimeRate, setOvertimeRate] = useState(1.5);
+  const [overtimeRate, setOvertimeRate] = useState(699);
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<RecentInvoice | null>(
@@ -101,28 +101,13 @@ export default function InvoicePage({ params }: InvoicePageProps) {
     if (!result?.extracted_data) return;
 
     try {
-      // Determine month type from total_day field (typically the max value)
-      const workingDaysInMonth = Math.max(...result.extracted_data.map(emp => emp.total_day || 0));
-      // Calculate overtime threshold: month days - 4 (30-4=26, 31-4=27, etc.)
-      const overtimeThreshold = workingDaysInMonth - 4;
-
-      // Calculate regular and overtime days for each employee
-      let totalRegularDays = 0;
-      let totalOvertimeDays = 0;
-
-      result.extracted_data.forEach(emp => {
-        const presentDays = emp.present_day;
-        if (presentDays > overtimeThreshold) {
-          totalRegularDays += overtimeThreshold;
-          totalOvertimeDays += (presentDays - overtimeThreshold);
-        } else {
-          totalRegularDays += presentDays;
-        }
-      });
+      // Calculate regular and overtime days from manual inputs
+      const totalRegularDays = result.extracted_data.reduce((sum, emp) => sum + emp.present_day, 0);
+      const totalOvertimeDays = result.extracted_data.reduce((sum, emp) => sum + (emp.overtime_days || 0), 0);
 
       const perDay = 466;
       const baseTotal = totalRegularDays * perDay;
-      const overtimeAmount = totalOvertimeDays * perDay * overtimeRate;
+      const overtimeAmount = totalOvertimeDays * overtimeRate;
       const totalWithOvertime = baseTotal + overtimeAmount;
 
       // Apply PF, ESIC, and Bonus on the total (base + overtime)
@@ -146,6 +131,10 @@ export default function InvoicePage({ params }: InvoicePageProps) {
       const tempInvoiceNumber = `INV-${year}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
 
       // Generate PDF as Blob
+      const headerImageUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/images/invoice_header.jpeg`
+        : '/images/invoice_header.jpeg';
+
       const pdfDoc = (
         <InvoicePDF
           totalEmployees={result.extracted_data.length}
@@ -157,6 +146,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
           serviceChargeRate={serviceChargeRate}
           bonusRate={bonusRate}
           overtimeRate={overtimeRate}
+          headerImageUrl={headerImageUrl}
         />
       );
 
@@ -217,16 +207,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         } catch (error) {
           console.error("Failed to refresh recent invoices:", error);
         }
-
-        // Download the PDF file to user's browser
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${tempInvoiceNumber}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        // Note: PDF download is handled by PDFDownloadLink component
       }
     } catch (error) {
       console.error("Failed to create invoice:", error);
@@ -299,6 +280,21 @@ export default function InvoicePage({ params }: InvoicePageProps) {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Handle edits to attendance data
+  const handleDataChange = (index: number, field: "present_day" | "overtime_days", value: number) => {
+    if (!result) return;
+
+    setResult(prev => {
+      if (!prev) return prev;
+      const newData = [...prev.extracted_data];
+      newData[index] = {
+        ...newData[index],
+        [field]: value,
+      };
+      return { ...prev, extracted_data: newData };
+    });
   };
 
   // After results load, fetch company employees once and build a fast lookup set
@@ -438,6 +434,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         overtimeRate={overtimeRate}
         existingEmployeeNames={existingEmployeeNames}
         onCreateInvoice={handleCreateInvoice}
+        onDataChange={handleDataChange}
       />
 
       {/* Recent Invoices */}
