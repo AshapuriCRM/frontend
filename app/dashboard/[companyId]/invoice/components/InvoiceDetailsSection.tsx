@@ -129,20 +129,20 @@ export function InvoiceDetailsSection({
             </div>
 
             <div>
-              <Label htmlFor="overtime-rate">Overtime Rate (Multiplier) *</Label>
+              <Label htmlFor="overtime-rate">Overtime Rate (₹ Per Day) *</Label>
               <Input
                 id="overtime-rate"
                 type="number"
                 value={overtimeRate}
                 onChange={(e) => setOvertimeRate(Number(e.target.value))}
-                placeholder="Enter overtime multiplier (e.g., 1.5)"
+                placeholder="Enter overtime rate per day"
                 className="mt-1"
-                min={1}
-                max={3}
-                step={0.1}
+                min={0}
+                max={5000}
+                step={1}
               />
               <p className="text-sm text-gray-600 mt-1">
-                Overtime pay multiplier (1.5x means 150% of normal rate)
+                Amount paid per overtime day (e.g., 699 for ₹699/day)
               </p>
             </div>
           </div>

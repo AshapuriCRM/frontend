@@ -34,6 +34,7 @@ interface Props {
   overtimeRate: number;
   existingEmployeeNames: Set<string>;
   onCreateInvoice: () => Promise<void>;
+  onDataChange?: (index: number, field: "present_day" | "overtime_days", value: number) => void;
 }
 
 export function ResultsDisplay({
@@ -47,6 +48,7 @@ export function ResultsDisplay({
   overtimeRate,
   existingEmployeeNames,
   onCreateInvoice,
+  onDataChange,
 }: Props) {
   if (error) {
     return (
@@ -92,6 +94,7 @@ export function ResultsDisplay({
                     serviceChargeRate={serviceChargeRate}
                     bonusRate={bonusRate}
                     overtimeRate={overtimeRate}
+                    headerImageUrl={typeof window !== 'undefined' ? `${window.location.origin}/images/invoice_header.jpeg` : undefined}
                   />
                 }
                 fileName={`${
@@ -110,6 +113,7 @@ export function ResultsDisplay({
               <EmployeeAttendanceTable
                 data={result.extracted_data}
                 existingEmployeeNames={existingEmployeeNames}
+                onDataChange={onDataChange}
               />
               <InvoiceBreakdown
                 data={result.extracted_data}
@@ -139,32 +143,37 @@ export function ResultsDisplay({
 function EmployeeAttendanceTable({
   data,
   existingEmployeeNames,
+  onDataChange,
 }: {
   data: AttendanceRecord[];
   existingEmployeeNames: Set<string>;
+  onDataChange?: (index: number, field: "present_day" | "overtime_days", value: number) => void;
 }) {
   const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
   return (
     <Card className="lg:col-span-1">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
           <Users className="h-5 w-5" /> Employee Attendance ({data.length}{" "}
           employees)
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+      <CardContent className="px-3 pb-3">
+        <div className="overflow-x-auto -mx-3">
+          <table className="w-full border-collapse min-w-[400px]">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-3 py-2 text-left text-sm font-medium">
+                <th className="px-2 py-2 text-left text-xs font-medium">
                   Employee
                 </th>
-                <th className="px-3 py-2 text-center text-sm font-medium">
+                <th className="px-2 py-2 text-center text-xs font-medium w-16">
                   Present
                 </th>
-                <th className="px-3 py-2 text-center text-sm font-medium">
+                <th className="px-2 py-2 text-center text-xs font-medium w-16">
+                  OT
+                </th>
+                <th className="px-2 py-2 text-center text-xs font-medium w-16">
                   Rate
                 </th>
               </tr>
@@ -184,14 +193,14 @@ function EmployeeAttendanceTable({
                     key={index}
                     className="border-b hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-3 py-3">
-                      <div className="flex items-start gap-2">
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-1.5">
                         {!nameExists && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="inline-flex items-center justify-center mt-0.5">
-                                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                <span className="inline-flex items-center justify-center flex-shrink-0">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -202,33 +211,52 @@ function EmployeeAttendanceTable({
                             </Tooltip>
                           </TooltipProvider>
                         )}
-                        <p className="font-medium text-sm">{record.name}</p>
-                        <div className="flex gap-1 mt-1">
-                          {record.total_day && (
-                            <Badge
-                              variant="secondary"
-                              className="text-xs px-1.5 py-0.5"
-                            >
-                              Total: {record.total_day}
-                            </Badge>
-                          )}
-                          {record.absent_day && (
-                            <Badge
-                              variant="destructive"
-                              className="text-xs px-1.5 py-0.5"
-                            >
-                              Absent: {record.absent_day}
-                            </Badge>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{record.name}</p>
+                          {(record.total_day || record.absent_day) && (
+                            <div className="flex gap-1 mt-0.5 flex-wrap">
+                              {record.total_day && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  T:{record.total_day}
+                                </span>
+                              )}
+                              {record.absent_day && (
+                                <span className="text-[10px] text-red-500">
+                                  A:{record.absent_day}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-center">
-                      <Badge variant="outline" className="font-semibold">
-                        {record.present_day}
-                      </Badge>
+                    <td className="px-1 py-2 text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="31"
+                        value={record.present_day}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          onDataChange?.(index, "present_day", value);
+                        }}
+                        className="w-12 px-1 py-1 text-center border rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="px-1 py-2 text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="31"
+                        value={record.overtime_days || 0}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          onDataChange?.(index, "overtime_days", value);
+                        }}
+                        className="w-12 px-1 py-1 text-center border rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </td>
+                    <td className="px-1 py-2 text-center">
                       {attendanceRate !== "N/A" && (
                         <Badge
                           variant={
@@ -236,7 +264,7 @@ function EmployeeAttendanceTable({
                               ? "default"
                               : "destructive"
                           }
-                          className="text-xs"
+                          className="text-[10px] px-1.5 py-0.5"
                         >
                           {attendanceRate}%
                         </Badge>
@@ -266,28 +294,13 @@ function InvoiceBreakdown({
   bonusRate: number;
   overtimeRate: number;
 }) {
-  // Determine month type from total_day field (typically the max value)
-  const workingDaysInMonth = Math.max(...data.map(emp => emp.total_day || 0));
-  // Calculate overtime threshold: month days - 4 (30-4=26, 31-4=27, etc.)
-  const overtimeThreshold = workingDaysInMonth - 4;
-
-  // Calculate regular and overtime days for each employee
-  let totalRegularDays = 0;
-  let totalOvertimeDays = 0;
-
-  data.forEach(emp => {
-    const presentDays = emp.present_day;
-    if (presentDays > overtimeThreshold) {
-      totalRegularDays += overtimeThreshold;
-      totalOvertimeDays += (presentDays - overtimeThreshold);
-    } else {
-      totalRegularDays += presentDays;
-    }
-  });
+  // Calculate regular and overtime days from manual inputs
+  const totalRegularDays = data.reduce((sum, emp) => sum + emp.present_day, 0);
+  const totalOvertimeDays = data.reduce((sum, emp) => sum + (emp.overtime_days || 0), 0);
 
   const perDay = 466;
   const baseTotal = totalRegularDays * perDay;
-  const overtimeAmount = totalOvertimeDays * perDay * overtimeRate;
+  const overtimeAmount = totalOvertimeDays * overtimeRate;
   const totalWithOvertime = baseTotal + overtimeAmount;
 
   // Apply PF, ESIC, and Bonus on the total (base + overtime)
@@ -331,7 +344,7 @@ function InvoiceBreakdown({
               {totalOvertimeDays > 0 && (
                 <div className="flex justify-between">
                   <span>
-                    Overtime ({totalOvertimeDays} days × ₹{perDay} × {overtimeRate}x)
+                    Overtime ({totalOvertimeDays} days × ₹{overtimeRate})
                   </span>
                   <span className="font-medium text-green-600 dark:text-green-400">
                     ₹{overtimeAmount.toLocaleString("en-IN")}

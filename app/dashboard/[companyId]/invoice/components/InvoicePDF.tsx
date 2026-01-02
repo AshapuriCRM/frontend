@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Page, StyleSheet, Text, View, Image } from "@react-pdf/renderer";
 import { numberToWords } from "../utils/index";
 import type { AttendanceRecord } from "../types";
 
@@ -18,27 +18,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#000",
   },
-  header: {
-    flexDirection: "column",
-    padding: 5,
-    borderBottomWidth: 2,
-    borderColor: "#000",
-  },
-  companyName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    letterSpacing: 2,
-    marginBottom: 5,
-  },
-  invoiceTitle: {
-    backgroundColor: "#000",
-    color: "#fff",
-    textAlign: "center",
-    padding: 5,
-    fontSize: 14,
-    fontWeight: "bold",
-    letterSpacing: 3,
+  headerImage: {
+    width: "100%",
+    height: "auto",
   },
   invoiceDetails: {
     flexDirection: "row",
@@ -93,18 +75,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   totalsSection: {
-    flexDirection: "row",
     borderTopWidth: 2,
     borderColor: "#000",
-  },
-  calculations: {
-    flex: 1,
-    padding: 5,
-    borderRightWidth: 2,
-    borderColor: "#000",
-  },
-  totals: {
-    flex: 1,
     padding: 5,
   },
   totalRow: {
@@ -113,12 +85,12 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     fontSize: 10,
   },
-  totalRowGrand: {
+  totalRowBold: {
     fontWeight: "bold",
-    fontSize: 12,
-    borderTopWidth: 2,
+    borderTopWidth: 1,
     borderColor: "#000",
     paddingTop: 3,
+    marginTop: 3,
   },
   gstSection: {
     marginTop: 8,
@@ -133,19 +105,22 @@ const styles = StyleSheet.create({
     lineHeight: 1.2,
   },
   grandTotalSection: {
-    backgroundColor: "#f0f0f0",
-    padding: 5,
-    borderWidth: 2,
+    marginTop: 10,
+    marginBottom: 10,
+    padding: 8,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
     borderColor: "#000",
-    textAlign: "center",
-    fontWeight: "bold",
-    fontSize: 14,
-    marginBottom: 5,
+    fontSize: 10,
+  },
+  grandTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 3,
   },
   amountWords: {
     marginTop: 5,
     fontSize: 10,
-    fontWeight: "bold",
   },
   footerInfo: {
     marginTop: 5,
@@ -172,6 +147,7 @@ export interface InvoicePDFProps {
   serviceChargeRate: number;
   bonusRate: number;
   overtimeRate: number;
+  headerImageUrl?: string;
 }
 
 export function InvoicePDF({
@@ -184,6 +160,7 @@ export function InvoicePDF({
   serviceChargeRate,
   bonusRate,
   overtimeRate,
+  headerImageUrl,
 }: InvoicePDFProps) {
   const SERVICE_CHARGE_RATE = serviceChargeRate / 100;
   const PF_RATE = 0.13;
@@ -213,27 +190,12 @@ export function InvoicePDF({
     })
     .toUpperCase();
 
-  // Determine month type from total_day field (typically the max value)
-  const workingDaysInMonth = Math.max(...extractedData.map(emp => emp.total_day || 0));
-  // Calculate overtime threshold: month days - 4 (30-4=26, 31-4=27, etc.)
-  const overtimeThreshold = workingDaysInMonth - 4;
-
-  // Calculate regular and overtime days for each employee
-  let totalRegularDays = 0;
-  let totalOvertimeDays = 0;
-
-  extractedData.forEach(emp => {
-    const presentDays = emp.present_day;
-    if (presentDays > overtimeThreshold) {
-      totalRegularDays += overtimeThreshold;
-      totalOvertimeDays += (presentDays - overtimeThreshold);
-    } else {
-      totalRegularDays += presentDays;
-    }
-  });
+  // Calculate regular and overtime days from manual inputs
+  const totalRegularDays = extractedData.reduce((sum, emp) => sum + emp.present_day, 0);
+  const totalOvertimeDays = extractedData.reduce((sum, emp) => sum + (emp.overtime_days || 0), 0);
 
   const baseTotal = totalRegularDays * Number(perDay);
-  const overtimeAmount = totalOvertimeDays * Number(perDay) * overtimeRate;
+  const overtimeAmount = totalOvertimeDays * overtimeRate;
   const totalWithOvertime = baseTotal + overtimeAmount;
 
   // Apply PF, ESIC, and Bonus on the total (base + overtime)
@@ -259,12 +221,12 @@ export function InvoicePDF({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.companyName}>ASHAPURI SECURITY SERVICES</Text>
-          </View>
-          <View style={styles.invoiceTitle}>
-            <Text>INVOICE</Text>
-          </View>
+          {headerImageUrl && (
+            <Image
+              style={styles.headerImage}
+              src={headerImageUrl}
+            />
+          )}
           <View style={styles.invoiceDetails}>
             <View style={styles.clientInfo}>
               <Text style={{ fontWeight: "bold" }}>
@@ -341,11 +303,11 @@ export function InvoicePDF({
                 <Text
                   style={[styles.tableCell, styles.tableCellLeft, { flex: 2 }]}
                 >
-                  OVERTIME ({overtimeRate}x rate)
+                  OVERTIME
                 </Text>
                 <Text style={styles.tableCell}>998514</Text>
                 <Text style={styles.tableCell}>{totalOvertimeDays}</Text>
-                <Text style={styles.tableCell}>{(Number(perDay) * overtimeRate).toFixed(2)}</Text>
+                <Text style={styles.tableCell}>{Number(overtimeRate).toFixed(2)}</Text>
                 <Text style={styles.tableCell}>{overtimeAmount.toFixed(2)}</Text>
               </View>
             )}
@@ -362,52 +324,39 @@ export function InvoicePDF({
             </View>
           </View>
           <View style={styles.totalsSection}>
-            <View style={styles.calculations}>
+            <View style={styles.totalRow}>
               <Text>PF @13%</Text>
-              <Text>ESIC @3.25%</Text>
-              {bonusRate > 0 && <Text>Bonus @{bonusRate}%</Text>}
-              <Text style={{ marginTop: 5, fontWeight: "bold" }}>
-                SUB TOTAL
-              </Text>
-              <Text style={{ marginTop: 5 }}>
-                Service charge @{serviceChargeRate}%
-              </Text>
+              <Text>{pf.toFixed(2)}</Text>
             </View>
-            <View style={styles.totals}>
+            <View style={styles.totalRow}>
+              <Text>ESIC @3.25%</Text>
+              <Text>{esic.toFixed(2)}</Text>
+            </View>
+            {bonusRate > 0 && (
               <View style={styles.totalRow}>
-                <Text></Text>
-                <Text>{pf.toFixed(2)}</Text>
+                <Text>Bonus @{bonusRate}%</Text>
+                <Text>{bonus.toFixed(2)}</Text>
               </View>
-              <View style={styles.totalRow}>
-                <Text></Text>
-                <Text>{esic.toFixed(2)}</Text>
-              </View>
-              {bonusRate > 0 && (
-                <View style={styles.totalRow}>
-                  <Text></Text>
-                  <Text>{bonus.toFixed(2)}</Text>
-                </View>
-              )}
-              <View style={styles.totalRow}>
-                <Text>TOTAL</Text>
-                <Text>{subTotal.toFixed(2)}</Text>
-              </View>
-              <View style={styles.totalRow}>
-                <Text></Text>
-                <Text>{serviceChargeTotal.toFixed(2)}</Text>
-              </View>
-              <View style={[styles.totalRow, styles.totalRowGrand]}>
-                <Text>TOTAL</Text>
-                <Text>{totalBeforeTax.toFixed(2)}</Text>
-              </View>
-              <View style={styles.totalRow}>
-                <Text>CGST @9%</Text>
-                <Text>{cgst.toFixed(2)}</Text>
-              </View>
-              <View style={styles.totalRow}>
-                <Text>SGST @9%</Text>
-                <Text>{sgst.toFixed(2)}</Text>
-              </View>
+            )}
+            <View style={[styles.totalRow, styles.totalRowBold]}>
+              <Text>SUB TOTAL</Text>
+              <Text>{subTotal.toFixed(2)}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text>Service charge @{serviceChargeRate}%</Text>
+              <Text>{serviceChargeTotal.toFixed(2)}</Text>
+            </View>
+            <View style={[styles.totalRow, styles.totalRowBold]}>
+              <Text>TOTAL</Text>
+              <Text>{totalBeforeTax.toFixed(2)}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text>CGST @9%</Text>
+              <Text>{cgst.toFixed(2)}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text>SGST @9%</Text>
+              <Text>{sgst.toFixed(2)}</Text>
             </View>
           </View>
           <View style={styles.gstSection}>
@@ -416,8 +365,8 @@ export function InvoicePDF({
             </Text>
             <Text style={{ fontWeight: "bold" }}>
               {gstPaidBy === "principal-employer"
-                ? "100% GST paid directly by you"
-                : "100% GST paid by Ashapuri Security Services"}
+                ? "100% GST paid directly by you (CGST & SGST excluded from Grand Total)"
+                : "100% GST paid by Ashapuri Security Services (CGST & SGST included in Grand Total)"}
             </Text>
             <View style={styles.bankDetails}>
               <Text style={{ fontWeight: "bold" }}>PUNJAB NATIONAL BANK</Text>
@@ -427,9 +376,10 @@ export function InvoicePDF({
             </View>
           </View>
           <View style={styles.grandTotalSection}>
-            <Text style={{ fontSize: 16, marginBottom: 5 }}>
-              GRAND TOTAL {grandTotal}
-            </Text>
+            <View style={styles.grandTotalRow}>
+              <Text style={{ fontWeight: "bold" }}>Grand Total</Text>
+              <Text style={{ fontWeight: "bold" }}>{grandTotal.toFixed(2)}</Text>
+            </View>
             <Text style={styles.amountWords}>{grandTotalInWords}</Text>
           </View>
           <View style={styles.footerInfo}>
